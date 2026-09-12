@@ -1,0 +1,42 @@
+[
+  {
+    "version": "0.2.0",
+    "date": "2026-09-12",
+    "zh": {
+      "title": "新增 doc 目录与版本说明",
+      "items": [
+        "新增 doc/ 目录：HARNESS 会话上下文、使用手册与版本说明随包分发。",
+        "版本说明机制：内置 VERSION_NOTES，按语言输出历史版本更新说明。",
+        "工具文档化：三个工具的能力与使用规则写入 HARNESS 上下文。"
+      ]
+    },
+    "en": {
+      "title": "Add doc directory and version notes",
+      "items": [
+        "New doc/ directory: HARNESS session context, usage manual and version notes ship with the package.",
+        "Version-notes mechanism: built-in VERSION_NOTES with localized history.",
+        "Tool documentation: the three tools' capabilities and usage rules are written into the HARNESS context."
+      ]
+    }
+  },
+  {
+    "version": "0.1.0",
+    "date": "2026-09-12",
+    "zh": {
+      "title": "初始版本",
+      "items": [
+        "obsidian_scaffold：生成合规插件骨架，内置命名/提交规则校验。",
+        "obsidian_validate：校验 manifest 与版本一致性。",
+        "obsidian_version：同步 manifest.json / versions.json / package.json 三处版本。"
+      ]
+    },
+    "en": {
+      "title": "Initial release",
+      "items": [
+        "obsidian_scaffold: generate a compliant plugin skeleton with built-in naming/submission checks.",
+        "obsidian_validate: validate the manifest and version consistency.",
+        "obsidian_version: bump the three version fields together."
+      ]
+    }
+  }
+]

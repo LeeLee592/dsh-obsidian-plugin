@@ -1,0 +1,3 @@
+[submodule "third_party/obsidian-plugin-skill"]
+	path = third_party/obsidian-plugin-skill
+	url = https://github.com/gapmiss/obsidian-plugin-skill.git

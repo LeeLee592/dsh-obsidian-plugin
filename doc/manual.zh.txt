@@ -1,0 +1,22 @@
+@dsh-obsidian/tool — 使用手册
+==========================================
+
+【这是什么插件】
+给 DeepSeek Harness 智能体提供 Obsidian 插件开发的三个工具：
+- obsidian_scaffold：生成合规插件骨架（src/main.ts + src/settings.ts 声明式设置 + esbuild/eslint + LICENSE 等 12 个文件），内置命名/提交规则校验。
+- obsidian_validate：校验 manifest 必填字段、命名与提交规则（id/name/description）、versions.json 映射与 package.json 版本一致性。
+- obsidian_version：同步 manifest.json / versions.json / package.json 三处版本。
+
+【使用】
+对 DSH 说「帮我新建一个 Obsidian 插件…」，智能体会：
+1. 用 obsidian_scaffold 生成骨架；
+2. 用 obsidian_validate 校验；
+3. 用 obsidian_version 管理版本。
+
+【命名规则】
+- id：小写字母/数字/连字符/下划线，不含 "obsidian"，不以 "plugin" 结尾。
+- name：不含 "Obsidian"，不以 "Plugin" 结尾，不以 "Obsi" 开头或以 "dian" 结尾。
+- description：不含 "Obsidian" / "This plugin"，句末标点（. ? ! 或 )），≤250 字符。
+
+【配置】
+defaultMinAppVersion（默认 1.13.0）：obsidian_scaffold 未显式传 minAppVersion 时使用。可在 profile 的 cordis.patch.yml 按 id 覆盖。
