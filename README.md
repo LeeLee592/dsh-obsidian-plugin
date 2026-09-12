@@ -1,8 +1,6 @@
 # dsh-obsidian-plugin
 
-[![Listed on dsh-plugin.org](https://dsh-plugin.org/badges/listed.svg)](https://dsh-plugin.org/plugins/your-owner/your-plugin-slug)
-
-<!-- 插件被 dsh-plugin.org 收录后，把上方链接中的 your-owner / your-plugin-slug 替换为实际的 owner 与 slug。 -->
+[![Listed on dsh-plugin.org](https://dsh-plugin.org/badges/listed.svg)](https://dsh-plugin.org/plugins/LeeLee592/dsh-obsidian-plugin-develop)
 
 给 DeepSeek Harness（DSH）的智能体提供 **Obsidian 插件开发能力**：脚手架、校验、版本同步。
 
@@ -25,7 +23,7 @@ dsh plugin --profile web add dsh-obsidian-plugin
 从源码开发 / 未发布到 registry 时：
 
 ```bash
-git clone <repo-url> && cd dsh-obsidian-plugin
+git clone https://github.com/LeeLee592/dsh-obsidian-plugin-develop && cd dsh-obsidian-plugin
 pnpm install
 pnpm run deploy
 ```
