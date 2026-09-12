@@ -17,7 +17,7 @@
 ## 安装
 
 ```bash
-dsh plugin --profile web add dsh-obsidian-plugin
+dsh plugin --profile web add @leelee/dsh-obsidian-plugin
 ```
 
 从源码开发 / 未发布到 registry 时：
@@ -28,7 +28,7 @@ pnpm install
 pnpm run deploy
 ```
 
-`pnpm run deploy` 依次执行：`tsc -> lib/`、`dsh plugin --profile web add "$(pwd)"`、`dsh --profile web --dump-config` 并校验输出包含 `dsh-obsidian-plugin`。默认 profile 为 `web`，可用 `DSH_PROFILE=<name> pnpm run deploy` 或 `pnpm run deploy -- <name>` 覆盖。
+`pnpm run deploy` 依次执行：`tsc -> lib/`、`dsh plugin --profile web add "$(pwd)"`、`dsh --profile web --dump-config` 并校验输出包含 `obsidian-plugin`。默认 profile 为 `web`，可用 `DSH_PROFILE=<name> pnpm run deploy` 或 `pnpm run deploy -- <name>` 覆盖。
 
 重启以加载工具：
 
@@ -43,7 +43,7 @@ dsh web
 配置项 `defaultMinAppVersion`（默认 `1.13.0`）可在 profile 的 `cordis.patch.yml` 按 id 覆盖：
 
 ```yaml
-- id: dsh-obsidian-plugin
+- id: obsidian-plugin
   config:
     defaultMinAppVersion: '1.14.0'
 ```
@@ -71,9 +71,9 @@ dsh web
 ```text
 ==> build (tsc -> lib/)
 ==> register checkout into profile 'web'
-+ dsh-obsidian-plugin link:.../dsh-obsidian-plugin
-==> verify: dump-config should contain 'dsh-obsidian-plugin'
-deploy: OK — 'dsh-obsidian-plugin' registered in profile 'web'
++ @leelee/dsh-obsidian-plugin link:.../dsh-obsidian-plugin
+==> verify: dump-config should contain 'obsidian-plugin'
+deploy: OK — 'obsidian-plugin' registered in profile 'web'
 ```
 
 `obsidian_scaffold`：

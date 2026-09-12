@@ -11,15 +11,16 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROFILE="${DSH_PROFILE:-${1:-web}}"
-PLUGIN_ID="dsh-obsidian-plugin"
+PLUGIN_ID="obsidian-plugin"
 
 cd "$ROOT"
 
 echo "==> build (tsc -> lib/)"
 pnpm run build
 
-# 清理 rename 前的历史包名，避免与新名重复 link；不存在则忽略。
+# 清理历史包名（rename 前），避免与新名重复 link；不存在则忽略。
 dsh plugin --profile "$PROFILE" remove "@dsh-obsidian/tool" >/dev/null 2>&1 || true
+dsh plugin --profile "$PROFILE" remove "dsh-obsidian-plugin" >/dev/null 2>&1 || true
 
 echo "==> register checkout into profile '$PROFILE'"
 dsh plugin --profile "$PROFILE" add "$ROOT"

@@ -1,4 +1,4 @@
-dsh-obsidian-plugin — User Manual
+@leelee/dsh-obsidian-plugin — User Manual
 ==========================================
 
 【What it is】
