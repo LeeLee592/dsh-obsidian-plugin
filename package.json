@@ -16,6 +16,7 @@
   },
   "files": ["lib", "doc", "cordis.patch.yml"],
   "license": "MIT",
+  "keywords": ["dsh", "dsh-plugin", "deepseek-harness", "obsidian"],
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
