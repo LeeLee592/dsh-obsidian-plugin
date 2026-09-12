@@ -7,7 +7,7 @@ import { readBundleDoc } from "./bundle-doc.js";
 
 // ---- plugin identity ------------------------------------------------------
 
-export const name = "obsidian-dev";
+export const name = "dsh-obsidian-plugin";
 export const inject = ["tools", "fs"];
 
 export const Config = z.object({

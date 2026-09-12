@@ -1,4 +1,4 @@
-@dsh-obsidian/tool — User Manual
+dsh-obsidian-plugin — User Manual
 ==========================================
 
 【What it is】

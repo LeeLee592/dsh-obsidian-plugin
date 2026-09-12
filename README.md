@@ -1,10 +1,10 @@
-# dsh-obsidian-plugin-develop
+# dsh-obsidian-plugin
 
 给 DeepSeek Harness（DSH）的智能体提供 **Obsidian 插件开发能力**：脚手架、校验、版本同步。
 
 ## 组成
 
-- **`@dsh-obsidian/tool`**（本仓库，一个 DSH 组合包 / bundle），注册 3 个工具：
+- **`dsh-obsidian-plugin`**（本仓库，一个 DSH 组合包 / bundle），注册 3 个工具：
   - `obsidian_scaffold` —— 生成合规插件骨架（`src/main.ts` + `src/settings.ts` 声明式设置 + esbuild/eslint + LICENSE 等 12 个文件），内置命名/提交规则校验。
   - `obsidian_validate` —— 校验 manifest 必填字段、命名与提交规则（id/name/description）、`versions.json` 映射与 `package.json` 版本一致性。
   - `obsidian_version` —— 同步 `manifest.json` / `versions.json` / `package.json` 三处版本。
@@ -32,7 +32,7 @@ npm install                            # typescript + @types/node
 npm run link-dsh-deps                  # 链接 $DSH_HOME/profiles/node_modules/@deepseek-ai 类型
 npm run build                          # tsc -> lib/
 dsh plugin --profile web add "$(pwd)"  # 链接本 checkout 并追加进 dsh.profile.bundles
-dsh --profile web --dump-config        # 验证：出现 "# == @dsh-obsidian/tool" 与 "id: obsidian-dev"
+dsh --profile web --dump-config        # 验证：出现 "# == dsh-obsidian-plugin" 与 "id: dsh-obsidian-plugin"
 dsh web                                # 重启后模型工具集多出 3 个 obsidian_* 工具
 ```
 
@@ -43,7 +43,7 @@ dsh web                                # 重启后模型工具集多出 3 个 ob
 配置项 `defaultMinAppVersion`（默认 `1.13.0`）可在 profile 的 `cordis.patch.yml` 按 id 覆盖：
 
 ```yaml
-- id: obsidian-dev
+- id: dsh-obsidian-plugin
   config:
     defaultMinAppVersion: '1.14.0'
 ```
