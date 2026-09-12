@@ -464,7 +464,7 @@ export async function scaffold(fs: Fs, args: ScaffoldArgs): Promise<string> {
       created++;
     }
   }
-  return `Scaffolded ${vars.id} into ${target} (${created} files). Next: cd ${args.targetDir} && npm install && npm run dev`;
+  return `Scaffolded ${vars.id} into ${target} (${created} files). Next: cd ${args.targetDir} && pnpm install && pnpm run dev`;
 }
 
 export async function validateProject(fs: Fs, args: { projectDir: string }): Promise<string> {

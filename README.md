@@ -28,9 +28,9 @@ bash scripts/install-skill.sh          # 软链到 ~/.dsh/skills/obsidian（或�
 ### 工具插件
 
 ```bash
-npm install                            # typescript + @types/node
-npm run link-dsh-deps                  # 链接 $DSH_HOME/profiles/node_modules/@deepseek-ai 类型
-npm run build                          # tsc -> lib/
+pnpm install                           # typescript + @types/node
+pnpm run link-dsh-deps                 # 链接 $DSH_HOME/profiles/node_modules/@deepseek-ai 类型
+pnpm run build                         # tsc -> lib/
 dsh plugin --profile web add "$(pwd)"  # 链接本 checkout 并追加进 dsh.profile.bundles
 dsh --profile web --dump-config        # 验证：出现 "# == dsh-obsidian-plugin" 与 "id: dsh-obsidian-plugin"
 dsh web                                # 重启后模型工具集多出 3 个 obsidian_* 工具

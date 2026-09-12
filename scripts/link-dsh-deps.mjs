@@ -3,7 +3,7 @@
 // build emits lib/; these packages are peer deps resolved by DSH at runtime.
 //
 // Source: <DSH_HOME>/profiles/node_modules/@deepseek-ai (present once a
-// profile has been booted). Run `npm install` first for typescript + @types/node.
+// profile has been booted). Run `pnpm install` first for typescript + @types/node.
 import { mkdir, symlink, readdir, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
