@@ -1,6 +1,6 @@
 # dsh-obsidian-plugin —— DSH bundle patch
 # 把 dsh-obsidian-plugin 工具插件挂进 profile 的配置树。
-# name 用包名（loader 解析到 dist/index.js）；id 是配置树里的唯一 id。
+# name 用包名（loader 解析到 lib/index.js）；id 是配置树里的唯一 id。
 - insert:
     - id: dsh-obsidian-plugin
       name: 'dsh-obsidian-plugin'
