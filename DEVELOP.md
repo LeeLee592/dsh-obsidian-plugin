@@ -71,4 +71,4 @@ pnpm run deploy         # build + 注册进 profile + dump-config 验证
 - **进程执行**：需要跑外部命令（如 eslint）时，`spawnSync` 借用被检项目自身的 `node_modules/.bin`，不存在时降级为 warning 而非报错。
 - **命名/提交规则护栏**：id 不含 `obsidian`、不以 `plugin` 结尾；name 不含 `Obsidian`、不以 `Plugin` 结尾；description 句末标点、≤250 字符——同时固化在 scaffold/validate 代码护栏与 skill 文档中。
 - **文件读写 seam**：`inject: ["tools", "fs"]`，读写走 `ctx.fs`（受沙箱约束），`ctx.fs` 缺省时回退 `node:fs`（bare-Node 测试场景）。
-- **skill 分发**：skill 要随插件在任意 project root 下可用，须放在 `assets/skills/` 随包分发，并在 `apply()` 里用 `ctx.get("skills")?.register({...})` 注册 runtime skill（body 从包内 `new URL('../assets/skills/<name>/SKILL.md', import.meta.url)` 读取）；不要放在 `.agents/skills/`（那只是给当前 project root 下的 agent 用的）。
+- **skill 分发**：skill 作为插件资产放在 `assets/skills/` 随包分发，并在 `apply()` 里用 `ctx.get("skills")?.register({...})` 注册 runtime skill（body 从包内 `new URL('../assets/skills/<name>/SKILL.md', import.meta.url)` 读取）。
