@@ -10,7 +10,7 @@
 
 两个互补、职责单一的部分：
 
-1. **知识（skill）**——Obsidian 插件开发规范（命名/提交规则、无障碍、代码质量、提交与 Scorecard）。源自 [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill)，提取为项目内置的 `.agents/skills/obsidian-plugin`，由 DSH 的 project-agents root（rank 200）自动发现。
+1. **知识（skill）**——Obsidian 插件开发规范（命名/提交规则、无障碍、代码质量、提交与 Scorecard）。源自 [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill)，提取为项目内置的 [`.agents/skills/obsidian-plugin`](.agents/skills/obsidian-plugin/SKILL.md)，由 DSH 的 project-agents root（rank 200）自动发现。
 2. **护栏（tool bundle）**——本仓库 `@leelee/dsh-obsidian-plugin`，用 typed schema 暴露 3 个工具，把确定性操作封装起来：
    - `obsidian_plugin_scaffold` —— 复用 obsidian-sample-plugin 模板生成骨架
    - `obsidian_plugin_validate` —— 结构校验 + eslint-plugin-obsidianmd 检查

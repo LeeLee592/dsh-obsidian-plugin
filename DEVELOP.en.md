@@ -10,7 +10,7 @@ Let DeepSeek Harness (DSH) agents reliably scaffold, validate, and version-sync 
 
 Two complementary, single-purpose parts:
 
-1. **Knowledge (skill)** — Obsidian plugin development guidelines (naming/submission rules, accessibility, code quality, submission & Scorecard). Derived from [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill), vendored into `.agents/skills/obsidian-plugin`, auto-discovered via DSH's project-agents root (rank 200).
+1. **Knowledge (skill)** — Obsidian plugin development guidelines (naming/submission rules, accessibility, code quality, submission & Scorecard). Derived from [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill), vendored into [`.agents/skills/obsidian-plugin`](.agents/skills/obsidian-plugin/SKILL.md), auto-discovered via DSH's project-agents root (rank 200).
 2. **Guardrails (tool bundle)** — this repo `@leelee/dsh-obsidian-plugin` exposes 3 tools with typed schemas:
    - `obsidian_plugin_scaffold` — generate a skeleton from the obsidian-sample-plugin template
    - `obsidian_plugin_validate` — structural validation + eslint-plugin-obsidianmd checks

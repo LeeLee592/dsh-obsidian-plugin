@@ -25,9 +25,9 @@ dsh plugin --profile web add @leelee/dsh-obsidian-plugin
 
 ## 文档
 
-- `doc/harness.default.md` —— 插件的 HARNESS 会话上下文（定位 / 能力 / 使用规则）。
-- `doc/version-notes.json` —— 历史版本更新说明（最新在上，中英双语）。
-- `doc/manual.{zh,en}.txt` —— 使用手册。
+- [`doc/harness.default.md`](doc/harness.default.md) —— 插件的 HARNESS 会话上下文（定位 / 能力 / 使用规则）。
+- [`doc/version-notes.json`](doc/version-notes.json) —— 历史版本更新说明（最新在上，中英双语）。
+- [`doc/manual.zh.txt`](doc/manual.zh.txt) / [`doc/manual.en.txt`](doc/manual.en.txt) —— 使用手册。
 
 ## 兼容性
 
