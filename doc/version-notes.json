@@ -8,7 +8,7 @@
         "工具改名：obsidian_scaffold / obsidian_validate / obsidian_version → obsidian_plugin_scaffold / obsidian_plugin_validate / obsidian_plugin_version。",
         "scaffold 复用官方 obsidian-sample-plugin 模板（14 个文件），不再在代码内嵌模板字符串。",
         "validate 集成 eslint-plugin-obsidianmd（obsidianmd/eslint-plugin）检查代码。",
-        "skill 不再使用 git submodule，内置为 .agents/skills/obsidian-plugin，重组为 DSH Tools / Workflow / 插件编写规范 / 校验与提交。",
+        "skill 不再使用 git submodule，内置为 assets/skills/obsidian-plugin，重组为 DSH Tools / Workflow / 插件编写规范 / 校验与提交。",
         "修复文件写入的会话沙箱策略传递（per-session sandboxPolicy）。"
       ]
     },
@@ -18,7 +18,7 @@
         "Rename tools: obsidian_scaffold / obsidian_validate / obsidian_version → obsidian_plugin_scaffold / obsidian_plugin_validate / obsidian_plugin_version.",
         "scaffold reuses the official obsidian-sample-plugin template (14 files) instead of inline template strings.",
         "validate integrates eslint-plugin-obsidianmd (obsidianmd/eslint-plugin) lint checks.",
-        "skill is no longer a git submodule; vendored at .agents/skills/obsidian-plugin and reorganized into DSH Tools / Workflow / authoring rules / validation & submission.",
+        "skill is no longer a git submodule; vendored at assets/skills/obsidian-plugin and reorganized into DSH Tools / Workflow / authoring rules / validation & submission.",
         "Fix per-session sandboxPolicy propagation for file writes."
       ]
     }

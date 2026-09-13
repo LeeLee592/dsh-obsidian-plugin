@@ -130,19 +130,17 @@ function readTemplate(fileName: string): string {
 }
 
 // ---- skill registration ---------------------------------------------------
-// The obsidian-plugin skill ships in .agents/skills/ (discoverable via the
-// project-agents root when this repo IS the project root). To also make it
-// available regardless of the caller's project root, register it as a runtime
-// skill during apply(). Project entries outrank runtime entries, so there is
-// no conflict when both paths see it.
+// The obsidian-plugin skill ships in assets/skills/ and is registered as a
+// runtime skill during apply(), so it is available regardless of the caller's
+// project root.
 
 function readSkillFile(): string {
-  const url = new URL("../.agents/skills/obsidian-plugin/SKILL.md", import.meta.url);
+  const url = new URL("../assets/skills/obsidian-plugin/SKILL.md", import.meta.url);
   return readFileSync(url, "utf8").replace(/^\uFEFF/, "");
 }
 
 function skillDir(): string {
-  return fileURLToPath(new URL("../.agents/skills/obsidian-plugin/", import.meta.url));
+  return fileURLToPath(new URL("../assets/skills/obsidian-plugin/", import.meta.url));
 }
 
 function parseSkill(md: string): { name: string; description: string; content: string } {

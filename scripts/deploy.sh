@@ -16,8 +16,7 @@ cd "$ROOT"
 echo "==> build (tsc -> lib/)"
 pnpm run build
 
-# obsidian-plugin skill 已内置于 .agents/skills/obsidian-plugin（project-agents root），
-# DSH 会自动发现，无需额外安装。
+# obsidian-plugin skill 已内置于 assets/skills/obsidian-plugin，随插件运行时注册，无需额外安装。
 
 echo "==> register checkout into profile '$PROFILE'"
 dsh plugin --profile "$PROFILE" add "$ROOT"

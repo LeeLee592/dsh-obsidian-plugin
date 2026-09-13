@@ -10,7 +10,7 @@
 
 两个互补、职责单一的部分：
 
-1. **知识（skill）**——Obsidian 插件开发规范（命名/提交规则、无障碍、代码质量、提交与 Scorecard）。源自 [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill)，内置为 [.agents/skills/obsidian-plugin](.agents/skills/obsidian-plugin/SKILL.md)，并在 `apply()` 里通过 `ctx.skills.register` 注册为 runtime skill（不依赖 project root）；同时保留 `.agents/skills` 目录，project-agents root（rank 200）也能发现。
+1. **知识（skill）**——Obsidian 插件开发规范（命名/提交规则、无障碍、代码质量、提交与 Scorecard）。源自 [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill)，内置为 [assets/skills/obsidian-plugin](assets/skills/obsidian-plugin/SKILL.md)，并在 `apply()` 里通过 `ctx.skills.register` 注册为 runtime skill（不依赖 project root）。
 2. **护栏（tool bundle）**——本仓库 `@leelee/dsh-obsidian-plugin`，用 typed schema 暴露 3 个工具，把确定性操作封装起来：
    - `obsidian_plugin_scaffold` —— 复用 obsidian-sample-plugin 模板生成骨架
    - `obsidian_plugin_validate` —— 结构校验 + eslint-plugin-obsidianmd 检查
@@ -42,8 +42,7 @@
 │   ├── link-dsh-deps.mjs # 链接 $DSH_HOME 的 @deepseek-ai 类型
 │   └── deploy.sh         # build + 注册工具 + dump-config 验证
 ├── assets/
-│   └── templates/        # obsidian-sample-plugin 模板（14 个文件，含占位符）
-├── .agents/
+│   ├── templates/        # obsidian-sample-plugin 模板（14 个文件，含占位符）
 │   └── skills/obsidian-plugin/  # 内置 skill（SKILL.md + reference/）
 ├── doc/                  # HARNESS 上下文 + 使用手册 + 版本说明
 ├── lib/                  # 构建产物（gitignore）
@@ -72,4 +71,4 @@ pnpm run deploy         # build + 注册进 profile + dump-config 验证
 - **进程执行**：需要跑外部命令（如 eslint）时，`spawnSync` 借用被检项目自身的 `node_modules/.bin`，不存在时降级为 warning 而非报错。
 - **命名/提交规则护栏**：id 不含 `obsidian`、不以 `plugin` 结尾；name 不含 `Obsidian`、不以 `Plugin` 结尾；description 句末标点、≤250 字符——同时固化在 scaffold/validate 代码护栏与 skill 文档中。
 - **文件读写 seam**：`inject: ["tools", "fs"]`，读写走 `ctx.fs`（受沙箱约束），`ctx.fs` 缺省时回退 `node:fs`（bare-Node 测试场景）。
-- **skill 分发**：skill 要随插件在任意 project root 下可用，须在 `apply()` 里用 `ctx.get("skills")?.register({...})` 注册 runtime skill（body 从包内 `new URL('../.agents/skills/<name>/SKILL.md', import.meta.url)` 读取）；仅放 `.agents/skills/` 只对「project root = 插件 checkout」生效。
+- **skill 分发**：skill 要随插件在任意 project root 下可用，须放在 `assets/skills/` 随包分发，并在 `apply()` 里用 `ctx.get("skills")?.register({...})` 注册 runtime skill（body 从包内 `new URL('../assets/skills/<name>/SKILL.md', import.meta.url)` 读取）；不要放在 `.agents/skills/`（那只是给当前 project root 下的 agent 用的）。

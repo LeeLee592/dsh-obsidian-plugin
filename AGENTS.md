@@ -18,7 +18,7 @@
 - [doc/harness.default.md](doc/harness.default.md)
 - [doc/manual.zh.txt](doc/manual.zh.txt) / [doc/manual.en.txt](doc/manual.en.txt)
 - [doc/version-notes.json](doc/version-notes.json)
-- [.agents/skills/obsidian-plugin/SKILL.md](.agents/skills/obsidian-plugin/SKILL.md)
+- [assets/skills/obsidian-plugin/SKILL.md](assets/skills/obsidian-plugin/SKILL.md)
 
 ### 可沉淀规则
 
