@@ -52,6 +52,13 @@ export const HARNESS_CONTEXT = readBundleDoc("harness.default.md", HARNESS_FALLB
 
 export class Fs {
   constructor(private fs?: any) {}
+  async resolve(path: string): Promise<string> {
+    if (this.fs) {
+      const target = await this.fs.resolve(path);
+      return target.displayPath;
+    }
+    return resolve(process.cwd(), path);
+  }
   async exists(path: string): Promise<boolean> {
     if (this.fs) {
       try {
@@ -406,10 +413,6 @@ export function toPluginId(name: string): string {
 
 const SEMVER = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
 
-function resolveDir(p: string): string {
-  return resolve(process.cwd(), p);
-}
-
 export function namingProblems(id: string, name: string, description: string): string[] {
   const errors: string[] = [];
   if (/obsidian/i.test(id)) errors.push('id cannot contain "obsidian"');
@@ -455,20 +458,27 @@ export async function scaffold(fs: Fs, args: ScaffoldArgs): Promise<string> {
   const naming = namingProblems(vars.id, vars.name, vars.description);
   if (naming.length) return "Error: metadata violates submission rules:\n- " + naming.join("\n- ");
 
-  const target = resolveDir(args.targetDir);
+  const target = await fs.resolve(args.targetDir);
   let created = 0;
-  for (const [file, template] of Object.entries(TEMPLATES)) {
-    const dest = join(target, file);
-    if (file === ".gitignore" || !(await fs.exists(dest))) {
-      await fs.writeText(dest, render(template, vars));
-      created++;
+  try {
+    for (const [file, template] of Object.entries(TEMPLATES)) {
+      const dest = join(target, file);
+      if (file === ".gitignore" || !(await fs.exists(dest))) {
+        await fs.writeText(dest, render(template, vars));
+        created++;
+      }
     }
+  } catch (error) {
+    if ((error as any)?.code === "FS_SANDBOX_DENIED") {
+      return `Error: cannot scaffold into "${target}" — it is outside the session workspace (sandbox mode "workspace-write" only allows writes under the workspace or temp dir). Use a targetDir inside the current workspace, or run with a wider sandbox mode.`;
+    }
+    throw error;
   }
   return `Scaffolded ${vars.id} into ${target} (${created} files). Next: cd ${args.targetDir} && pnpm install && pnpm run dev`;
 }
 
 export async function validateProject(fs: Fs, args: { projectDir: string }): Promise<string> {
-  const dir = resolveDir(args.projectDir);
+  const dir = await fs.resolve(args.projectDir);
   const problems: string[] = [];
   const warnings: string[] = [];
 
@@ -505,7 +515,7 @@ export async function validateProject(fs: Fs, args: { projectDir: string }): Pro
 }
 
 export async function bumpVersion(fs: Fs, args: { projectDir: string; version: string; minAppVersion?: string }): Promise<string> {
-  const dir = resolveDir(args.projectDir);
+  const dir = await fs.resolve(args.projectDir);
   if (!SEMVER.test(args.version)) return `Error: version "${args.version}" is not semver`;
 
   const manifestPath = join(dir, "manifest.json");
@@ -523,9 +533,16 @@ export async function bumpVersion(fs: Fs, args: { projectDir: string; version: s
   versions[args.version] = minAppVersion;
   pkg.version = args.version;
 
-  await fs.writeText(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
-  await fs.writeText(versionsPath, JSON.stringify(versions, null, 2) + "\n");
-  await fs.writeText(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+  try {
+    await fs.writeText(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+    await fs.writeText(versionsPath, JSON.stringify(versions, null, 2) + "\n");
+    await fs.writeText(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+  } catch (error) {
+    if ((error as any)?.code === "FS_SANDBOX_DENIED") {
+      return `Error: cannot write to "${dir}" — it is outside the session workspace (sandbox mode "workspace-write" only allows writes under the workspace or temp dir). Use a projectDir inside the current workspace, or run with a wider sandbox mode.`;
+    }
+    throw error;
+  }
 
   return `Bumped to ${args.version} (minAppVersion ${minAppVersion}). Remember to git add manifest.json versions.json package.json`;
 }
