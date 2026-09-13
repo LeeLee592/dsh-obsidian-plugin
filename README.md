@@ -24,11 +24,12 @@ dsh plugin --profile web add @leelee/dsh-obsidian-plugin
 
 ```bash
 git clone https://github.com/LeeLee592/dsh-obsidian-plugin.git && cd dsh-obsidian-plugin
+git submodule update --init
 pnpm install
 pnpm run deploy
 ```
 
-`pnpm run deploy` 依次执行：`tsc -> lib/`、`dsh plugin --profile web add "$(pwd)"`、`dsh --profile web --dump-config` 并校验输出包含 `obsidian-plugin`。默认 profile 为 `web`，可用 `DSH_PROFILE=<name> pnpm run deploy` 或 `pnpm run deploy -- <name>` 覆盖。
+`pnpm run deploy` 依次执行：安装 `obsidian` skill（软链到 `~/.dsh/skills`）、`tsc -> lib/`、`dsh plugin --profile web add "$(pwd)"`、`dsh --profile web --dump-config` 并校验输出包含 `obsidian-plugin`。默认 profile 为 `web`，可用 `DSH_PROFILE=<name> pnpm run deploy` 或 `pnpm run deploy -- <name>` 覆盖。
 
 重启以加载工具：
 
