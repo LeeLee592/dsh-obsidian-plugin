@@ -8,7 +8,12 @@ Provides DeepSeek Harness (DSH) agents with Obsidian plugin development capabili
 
 ## Features
 
-- **`obsidian-plugin` skill** (knowledge, derived from [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill)): Obsidian plugin development guidelines that steer the agent's workflow.
+### skill
+
+- **`obsidian-plugin`** (knowledge, derived from [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill)): Obsidian plugin development guidelines (authoring rules, validation & submission) that steer the agent's workflow.
+
+### tools
+
 - **`obsidian_plugin_scaffold`**: generates a compliant plugin skeleton from the official [obsidianmd/obsidian-sample-plugin](https://github.com/obsidianmd/obsidian-sample-plugin) template, with built-in naming/submission checks.
 - **`obsidian_plugin_validate`**: validates manifest required fields, naming rules, `versions.json` mapping, and `package.json` version consistency, and lints code with the official [obsidianmd/eslint-plugin](https://github.com/obsidianmd/eslint-plugin) (eslint-plugin-obsidianmd).
 - **`obsidian_plugin_version`**: syncs versions across `manifest.json` / `versions.json` / `package.json`.

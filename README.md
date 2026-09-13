@@ -8,7 +8,12 @@
 
 ## 主要功能
 
-- **`obsidian-plugin` skill**（知识库，源自 [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill)）：提供 Obsidian 插件开发的规范指导，引导 agent 何时、如何开发插件。
+### skill
+
+- **`obsidian-plugin`**（知识库，源自 [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill)）：提供 Obsidian 插件开发的规范指导（插件编写规范、校验与提交），引导 agent 何时、如何开发插件。
+
+### tools
+
 - **`obsidian_plugin_scaffold`**：使用官方 [obsidianmd/obsidian-sample-plugin](https://github.com/obsidianmd/obsidian-sample-plugin) 模板生成合规插件骨架，内置命名/提交规则校验。
 - **`obsidian_plugin_validate`**：校验 manifest 必填字段、命名规则、`versions.json` 映射与 `package.json` 版本一致性，并使用官方 [obsidianmd/eslint-plugin](https://github.com/obsidianmd/eslint-plugin)（eslint-plugin-obsidianmd）检查代码。
 - **`obsidian_plugin_version`**：同步 `manifest.json` / `versions.json` / `package.json` 三处版本。
