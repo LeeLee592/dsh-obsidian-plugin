@@ -25,9 +25,9 @@ Tell DSH "create an Obsidian plugin …" and the agent loads the `obsidian-plugi
 
 ## Docs
 
-- [`doc/harness.default.md`](doc/harness.default.md) — the plugin's HARNESS session context (positioning / capabilities / usage rules).
-- [`doc/version-notes.json`](doc/version-notes.json) — version history (latest first, zh + en).
-- [`doc/manual.zh.txt`](doc/manual.zh.txt) / [`doc/manual.en.txt`](doc/manual.en.txt) — user manual.
+- [doc/harness.default.md](doc/harness.default.md) — the plugin's HARNESS session context (positioning / capabilities / usage rules).
+- [doc/version-notes.json](doc/version-notes.json) — version history (latest first, zh + en).
+- [doc/manual.zh.txt](doc/manual.zh.txt) / [doc/manual.en.txt](doc/manual.en.txt) — user manual.
 
 ## Compatibility
 
