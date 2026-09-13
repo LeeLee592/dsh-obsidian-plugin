@@ -18,7 +18,7 @@ cd "$ROOT"
 echo "==> build (tsc -> lib/)"
 pnpm run build
 
-# obsidian skill 已内置于 .agents/skills/obsidian（project-agents root），
+# obsidian-plugin skill 已内置于 .agents/skills/obsidian-plugin（project-agents root），
 # DSH 会自动发现，无需软链安装。
 
 # 清理历史包名（rename 前），避免与新名重复 link；不存在则忽略。

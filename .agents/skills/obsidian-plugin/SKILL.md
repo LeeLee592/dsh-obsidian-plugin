@@ -1,5 +1,5 @@
 ---
-name: obsidian
+name: obsidian-plugin
 description: Comprehensive guidelines for Obsidian plugin development including ESLint rules from eslint-plugin-obsidianmd v0.4.1, TypeScript best practices, memory management, API usage (requestUrl vs fetch), UI/UX standards, submission process, and Scorecard optimization. Use when working with Obsidian plugins, main.ts files, manifest.json, Plugin class, vault operations, or any Obsidian API development. Pair with the obsidian_scaffold, obsidian_validate, and obsidian_version tools for scaffolding, validating, and versioning.
 license: MIT
 metadata: 
@@ -13,6 +13,26 @@ Follow these comprehensive guidelines derived from the official Obsidian ESLint 
 ## Working with the DSH Tools
 
 This skill pairs with three tools from the `@leelee/dsh-obsidian-plugin` bundle. Use them for the deterministic operations; this skill supplies the rules and guidelines those tools enforce.
+
+### When to call which tool
+
+| When / scenario | Tool | Key parameters |
+|---|---|---|
+| User asks to create a new Obsidian plugin | `obsidian_scaffold` | `targetDir`, `id`, `name`, `description`, `author` |
+| Validate an existing plugin / pre-submission self-check | `obsidian_validate` | `projectDir` |
+| Publish a new release / bump the version | `obsidian_version` | `projectDir`, `version`, `minAppVersion?` |
+
+### Parameter sources
+
+- `id` / `name` / `description`: ask the user first if not provided, or infer from the project directory name / conversation context; they must satisfy the "Submission & Naming" rules below.
+- `targetDir` / `projectDir`: the Obsidian plugin project directory, defaulting to the current workspace.
+- `version`: the target semver, e.g. `1.1.0`.
+
+### Error loop
+
+Naming or version errors returned by `obsidian_scaffold` / `obsidian_validate` map to the "Submission & Naming" and "Plugin Submission Validation Workflow" rules below; fix per those rules and re-run until clean.
+
+### Tool reference
 
 - `obsidian_scaffold` — Generate a submission-ready plugin skeleton (`src/main.ts` + `src/settings.ts` + `manifest.json` + esbuild/eslint configs + `versions.json` + `LICENSE`, 12 files). It validates id/name/description against the naming rules below before writing.
 - `obsidian_validate` — Validate an existing plugin: manifest required fields, naming/submission rules (id/name/description), `versions.json` mapping, and `package.json` version consistency.
