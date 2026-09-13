@@ -1,5 +1,7 @@
 # 开发文档
 
+🇨🇳 **中文** | [🌐 English](./DEVELOP.en.md)
+
 ## 目标
 
 让 DeepSeek Harness（DSH）的智能体可靠地完成 Obsidian 插件的脚手架、校验与版本同步，并配套提供开发规范知识（skill）。
