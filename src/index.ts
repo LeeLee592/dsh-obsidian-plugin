@@ -49,15 +49,25 @@ export const HARNESS_CONTEXT = readBundleDoc("harness.default.md", HARNESS_FALLB
 // ---- filesystem seam ------------------------------------------------------
 // `ctx.fs` is injected by the harness (sandboxed/observable). It is optional so
 // the smoke tests can run in bare Node; in that case we fall back to node:fs.
+//
+// Every mutating call must carry the calling session's sandbox policy so the
+// `dsh-fs-sandbox` backend fences against the *session* workspace, not the
+// process-wide fallback root.
+
+export interface FsCall {
+  workspaceRoot?: string;
+  policy?: any;
+  signal?: AbortSignal;
+}
 
 export class Fs {
   constructor(private fs?: any) {}
-  async resolve(path: string): Promise<string> {
+  async resolve(path: string, workspaceRoot?: string): Promise<string> {
     if (this.fs) {
-      const target = await this.fs.resolve(path);
+      const target = await this.fs.resolve(path, workspaceRoot === undefined ? undefined : { cwd: workspaceRoot });
       return target.displayPath;
     }
-    return resolve(process.cwd(), path);
+    return resolve(workspaceRoot ?? process.cwd(), path);
   }
   async exists(path: string): Promise<boolean> {
     if (this.fs) {
@@ -81,9 +91,10 @@ export class Fs {
       return null;
     }
   }
-  async writeText(path: string, content: string): Promise<void> {
+  async writeText(path: string, content: string, policy?: any, signal?: AbortSignal): Promise<void> {
     if (this.fs) {
-      await this.fs.writeText(await this.fs.resolve(path), content);
+      const target = await this.fs.resolve(path);
+      await this.fs.writeText(target, content, undefined, signal, policy);
       return;
     }
     await mkdir(dirname(path), { recursive: true });
@@ -441,7 +452,7 @@ interface ScaffoldArgs {
   version?: string;
 }
 
-export async function scaffold(fs: Fs, args: ScaffoldArgs): Promise<string> {
+export async function scaffold(fs: Fs, args: ScaffoldArgs, call: FsCall = {}): Promise<string> {
   const vars: Vars = {
     id: args.id,
     name: args.name,
@@ -458,13 +469,13 @@ export async function scaffold(fs: Fs, args: ScaffoldArgs): Promise<string> {
   const naming = namingProblems(vars.id, vars.name, vars.description);
   if (naming.length) return "Error: metadata violates submission rules:\n- " + naming.join("\n- ");
 
-  const target = await fs.resolve(args.targetDir);
+  const target = await fs.resolve(args.targetDir, call.workspaceRoot);
   let created = 0;
   try {
     for (const [file, template] of Object.entries(TEMPLATES)) {
       const dest = join(target, file);
       if (file === ".gitignore" || !(await fs.exists(dest))) {
-        await fs.writeText(dest, render(template, vars));
+        await fs.writeText(dest, render(template, vars), call.policy, call.signal);
         created++;
       }
     }
@@ -477,8 +488,8 @@ export async function scaffold(fs: Fs, args: ScaffoldArgs): Promise<string> {
   return `Scaffolded ${vars.id} into ${target} (${created} files). Next: cd ${args.targetDir} && pnpm install && pnpm run dev`;
 }
 
-export async function validateProject(fs: Fs, args: { projectDir: string }): Promise<string> {
-  const dir = await fs.resolve(args.projectDir);
+export async function validateProject(fs: Fs, args: { projectDir: string }, call: FsCall = {}): Promise<string> {
+  const dir = await fs.resolve(args.projectDir, call.workspaceRoot);
   const problems: string[] = [];
   const warnings: string[] = [];
 
@@ -514,8 +525,8 @@ export async function validateProject(fs: Fs, args: { projectDir: string }): Pro
   return "Validation failed:\n- " + problems.join("\n- ");
 }
 
-export async function bumpVersion(fs: Fs, args: { projectDir: string; version: string; minAppVersion?: string }): Promise<string> {
-  const dir = await fs.resolve(args.projectDir);
+export async function bumpVersion(fs: Fs, args: { projectDir: string; version: string; minAppVersion?: string }, call: FsCall = {}): Promise<string> {
+  const dir = await fs.resolve(args.projectDir, call.workspaceRoot);
   if (!SEMVER.test(args.version)) return `Error: version "${args.version}" is not semver`;
 
   const manifestPath = join(dir, "manifest.json");
@@ -534,9 +545,9 @@ export async function bumpVersion(fs: Fs, args: { projectDir: string; version: s
   pkg.version = args.version;
 
   try {
-    await fs.writeText(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
-    await fs.writeText(versionsPath, JSON.stringify(versions, null, 2) + "\n");
-    await fs.writeText(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+    await fs.writeText(manifestPath, JSON.stringify(manifest, null, 2) + "\n", call.policy, call.signal);
+    await fs.writeText(versionsPath, JSON.stringify(versions, null, 2) + "\n", call.policy, call.signal);
+    await fs.writeText(pkgPath, JSON.stringify(pkg, null, 2) + "\n", call.policy, call.signal);
   } catch (error) {
     if ((error as any)?.code === "FS_SANDBOX_DENIED") {
       return `Error: cannot write to "${dir}" — it is outside the session workspace (sandbox mode "workspace-write" only allows writes under the workspace or temp dir). Use a projectDir inside the current workspace, or run with a wider sandbox mode.`;
@@ -558,6 +569,16 @@ export function apply(ctx: any, config: any) {
   const fs = new Fs(ctx?.fs);
   const cfg = (config ?? {}) as { defaultMinAppVersion?: string };
 
+  function makeCall(exec: any): FsCall {
+    const session = exec?.agent?.session;
+    const policy = ctx?.sandboxPolicy?.resolve ? ctx.sandboxPolicy.resolve(session ? { session } : {}) : undefined;
+    return {
+      workspaceRoot: policy?.workspaceRoot ?? session?.header?.cwd,
+      policy,
+      signal: exec?.signal,
+    };
+  }
+
   ctx.tools.register(defineTool({
     name: "obsidian_scaffold",
     description: "Generate a submission-ready Obsidian plugin skeleton (src/main.ts, src/settings.ts with declarative settings, manifest.json, esbuild/eslint configs, version-bump, versions.json, LICENSE, .gitignore). Validates id/name/description against Obsidian submission rules.",
@@ -573,8 +594,8 @@ export function apply(ctx: any, config: any) {
       version: { type: "string", description: "Initial semver version, e.g. 0.1.0." },
     },
     output: textOutput,
-    async execute(args: any) {
-      return scaffold(fs, { ...args, minAppVersion: args.minAppVersion ?? cfg.defaultMinAppVersion });
+    async execute(args: any, exec: any) {
+      return scaffold(fs, { ...args, minAppVersion: args.minAppVersion ?? cfg.defaultMinAppVersion }, makeCall(exec));
     },
   }));
 
@@ -585,8 +606,8 @@ export function apply(ctx: any, config: any) {
       projectDir: { type: "string", required: true, description: "Plugin project directory (absolute or workspace-relative)." },
     },
     output: textOutput,
-    async execute(args: any) {
-      return validateProject(fs, args);
+    async execute(args: any, exec: any) {
+      return validateProject(fs, args, makeCall(exec));
     },
   }));
 
@@ -599,8 +620,8 @@ export function apply(ctx: any, config: any) {
       minAppVersion: { type: "string", description: "Optional new minimum Obsidian version." },
     },
     output: textOutput,
-    async execute(args: any) {
-      return bumpVersion(fs, args);
+    async execute(args: any, exec: any) {
+      return bumpVersion(fs, args, makeCall(exec));
     },
   }));
 }
