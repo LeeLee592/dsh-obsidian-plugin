@@ -12,7 +12,7 @@
 - `obsidian_validate` —— 校验 manifest 必填字段、命名与提交规则（id/name/description）、`versions.json` 映射与 `package.json` 版本一致性。
 - `obsidian_version` —— 同步 `manifest.json` / `versions.json` / `package.json` 三处版本。
 
-另配套 `obsidian` skill（知识库，经 git submodule 引入 [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill)）：Obsidian API、命名/提交规则、无障碍、社区提交与 Scorecard 指南。
+另配套 `obsidian` skill（知识库，内置于 `.agents/skills/obsidian`，源自 [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill)）：Obsidian API、命名/提交规则、无障碍、社区提交与 Scorecard 指南。
 
 ## 安装
 
@@ -24,12 +24,11 @@ dsh plugin --profile web add @leelee/dsh-obsidian-plugin
 
 ```bash
 git clone https://github.com/LeeLee592/dsh-obsidian-plugin.git && cd dsh-obsidian-plugin
-git submodule update --init
 pnpm install
 pnpm run deploy
 ```
 
-`pnpm run deploy` 依次执行：安装 `obsidian` skill（软链到 `~/.dsh/skills`）、`tsc -> lib/`、`dsh plugin --profile web add "$(pwd)"`、`dsh --profile web --dump-config` 并校验输出包含 `obsidian-plugin`。默认 profile 为 `web`，可用 `DSH_PROFILE=<name> pnpm run deploy` 或 `pnpm run deploy -- <name>` 覆盖。
+`pnpm run deploy` 依次执行：`tsc -> lib/`、`dsh plugin --profile web add "$(pwd)"`、`dsh --profile web --dump-config` 并校验输出包含 `obsidian-plugin`。`obsidian` skill 已内置于 `.agents/skills/obsidian`，DSH 会自动发现，无需额外安装。默认 profile 为 `web`，可用 `DSH_PROFILE=<name> pnpm run deploy` 或 `pnpm run deploy -- <name>` 覆盖。
 
 重启以加载工具：
 

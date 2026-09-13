@@ -8,7 +8,7 @@
 
 两个互补、职责单一的部分：
 
-1. **知识（skill）**——Obsidian API、命名/提交规则、无障碍、社区提交与 Scorecard 指南。来自 [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill)，以 **git submodule** 引入，不复制进仓库；`install-skill.sh` 软链到 DSH 的 skill 发现根。
+1. **知识（skill）**——Obsidian API、命名/提交规则、无障碍、社区提交与 Scorecard 指南。源自 [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill)，已提取为项目内置的 `.agents/skills/obsidian`，由 DSH 的 project-agents root 自动发现。
 2. **护栏（tool bundle）**——本仓库 `@leelee/dsh-obsidian-plugin`，用 typed schema 暴露 3 个工具，把「脚手架、校验、版本同步」这些容易出错的确定性操作封装起来。
 
 ```
@@ -17,7 +17,7 @@
 └───────▲──────────────────────────▲─────────┘
         │ 工具(bundle)             │ skill 发现
 ┌───────┴──────────────────────┐  ┌────────┴───────────────────┐
-│ @leelee/dsh-obsidian-plugin │  │ obsidian skill（submodule） │
+│ @leelee/dsh-obsidian-plugin │  │ obsidian skill（内置）        │
 │  scaffold/validate/version  │  │  SKILL.md + reference/*     │
 └─────────────────────────────┘  └─────────────────────────────┘
 ```
@@ -32,8 +32,8 @@
 ├── src/index.ts          # 工具插件（唯一的实现）
 ├── scripts/
 │   ├── link-dsh-deps.mjs # 链接 $DSH_HOME/profiles/node_modules/@deepseek-ai 类型
-│   └── install-skill.sh  # 软链 submodule skill 到发现根
-├── third_party/obsidian-plugin-skill/   # git submodule（gapmiss skill）
+│   └── deploy.sh         # build + 注册工具 + 验证
+├── .agents/skills/obsidian/  # 内置 obsidian skill（SKILL.md + reference/）
 ├── lib/                  # 构建产物（gitignore）
 ├── DESIGN.md / README.md
 ```
@@ -44,7 +44,7 @@
 - **安装**：`dsh plugin --profile web add <checkout>`（转发 pnpm，链接本 checkout 并追加进 `dsh.profile.bundles`）。
 - **配置覆盖**：`defaultMinAppVersion`（默认 `1.13.0`）可由用户在 profile 的 `cordis.patch.yml` 按 id 覆盖；patch 覆盖整行 `config`（不深合并），故只给「用户大概率保留」的默认值。
 - **peer 依赖**：`@deepseek-ai/cordis`/`dsh-tools`/`schemastery` 由 DSH 安装目录解析，不随包分发。
-- **skill**：submodule 的 `obsidian` skill 通过软链进入 `.dsh/skills`（rank 100）或 `~/.dsh/skills`（rank 400）被自动发现。
+- **skill**：`obsidian` skill 内置于 `.agents/skills/obsidian`，由 DSH 的 project-agents root（rank 200）自动发现，无需软链。
 
 ## 工具实现要点
 

@@ -18,8 +18,8 @@ cd "$ROOT"
 echo "==> build (tsc -> lib/)"
 pnpm run build
 
-echo "==> install obsidian skill (symlink into ~/.dsh/skills)"
-bash "$ROOT/scripts/install-skill.sh"
+# obsidian skill 已内置于 .agents/skills/obsidian（project-agents root），
+# DSH 会自动发现，无需软链安装。
 
 # 清理历史包名（rename 前），避免与新名重复 link；不存在则忽略。
 dsh plugin --profile "$PROFILE" remove "@dsh-obsidian/tool" >/dev/null 2>&1 || true
