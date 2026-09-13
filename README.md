@@ -21,14 +21,6 @@ dsh plugin --profile web add @leelee/dsh-obsidian-plugin
 
 对 DSH 说「帮我新建一个 Obsidian 插件…」，agent 会加载 `obsidian-plugin` skill，按照 *Obsidian Plugin Development Guidelines* 的指导进行插件开发，并在过程中调用 `obsidian_plugin_scaffold` / `obsidian_plugin_validate` / `obsidian_plugin_version` 完成脚手架、校验与版本管理。
 
-配置项 `defaultMinAppVersion`（默认 `1.13.0`）可在 profile 的 `cordis.patch.yml` 按 id 覆盖：
-
-```yaml
-- id: obsidian-plugin
-  config:
-    defaultMinAppVersion: '1.14.0'
-```
-
 ## 文档
 
 - `doc/harness.default.md` —— 插件的 HARNESS 会话上下文（定位 / 能力 / 使用规则）。
@@ -45,5 +37,3 @@ dsh plugin --profile web add @leelee/dsh-obsidian-plugin
 | 权限 | 注入 `tools` + `fs`（受 DSH 沙箱约束，无外部网络调用） |
 | Node（开发构建） | 20+ |
 | License | MIT |
-
-详见 [DESIGN.md](DESIGN.md)。
