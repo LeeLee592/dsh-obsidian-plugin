@@ -21,7 +21,7 @@
 ## 安装
 
 ```bash
-dsh plugin --profile web add @leelee/dsh-obsidian-plugin
+dsh plugin --profile web add @leelee592/dsh-obsidian-plugin
 ```
 
 ## 使用

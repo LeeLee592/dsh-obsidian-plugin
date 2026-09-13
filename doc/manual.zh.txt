@@ -1,4 +1,4 @@
-@leelee/dsh-obsidian-plugin — 使用手册
+@leelee592/dsh-obsidian-plugin — 使用手册
 ==========================================
 
 【这是什么插件】

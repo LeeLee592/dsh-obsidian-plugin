@@ -11,7 +11,7 @@
 两个互补、职责单一的部分：
 
 1. **知识（skill）**——Obsidian 插件开发规范（命名/提交规则、无障碍、代码质量、提交与 Scorecard）。源自 [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill)，内置为 [assets/skills/obsidian-plugin](assets/skills/obsidian-plugin/SKILL.md)，并在 `apply()` 里通过 `ctx.skills.register` 注册为 runtime skill（不依赖 project root）。
-2. **护栏（tool bundle）**——本仓库 `@leelee/dsh-obsidian-plugin`，用 typed schema 暴露 3 个工具，把确定性操作封装起来：
+2. **护栏（tool bundle）**——本仓库 `@leelee592/dsh-obsidian-plugin`，用 typed schema 暴露 3 个工具，把确定性操作封装起来：
    - `obsidian_plugin_scaffold` —— 复用 obsidian-sample-plugin 模板生成骨架
    - `obsidian_plugin_validate` —— 结构校验 + eslint-plugin-obsidianmd 检查
    - `obsidian_plugin_version` —— 三处版本同步
@@ -22,7 +22,7 @@
 └───────▲──────────────────────────▲─────────┘
         │ 工具(bundle)             │ skill 发现
 ┌───────┴──────────────────────┐  ┌────────┴───────────────────┐
-│ @leelee/dsh-obsidian-plugin │  │ obsidian-plugin skill（内置）  │
+│ @leelee592/dsh-obsidian-plugin │  │ obsidian-plugin skill（内置）  │
 │  scaffold/validate/version  │  │  SKILL.md + reference/*     │
 └─────────────────────────────┘  └─────────────────────────────┘
 ```
@@ -32,7 +32,7 @@
 ```
 .
 ├── package.json          # dsh.bundle manifest + scripts + peerDeps
-├── cordis.patch.yml      # insert obsidian-plugin -> @leelee/dsh-obsidian-plugin
+├── cordis.patch.yml      # insert obsidian-plugin -> @leelee592/dsh-obsidian-plugin
 ├── tsconfig.json         # tsc -> lib/
 ├── pnpm-lock.yaml        # pnpm 锁文件
 ├── src/

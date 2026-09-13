@@ -11,7 +11,7 @@ Let DeepSeek Harness (DSH) agents reliably scaffold, validate, and version-sync 
 Two complementary, single-purpose parts:
 
 1. **Knowledge (skill)** — Obsidian plugin development guidelines (naming/submission rules, accessibility, code quality, submission & Scorecard). Derived from [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill), vendored into [assets/skills/obsidian-plugin](assets/skills/obsidian-plugin/SKILL.md) and registered as a runtime skill via `ctx.skills.register` in `apply()` (independent of project root).
-2. **Guardrails (tool bundle)** — this repo `@leelee/dsh-obsidian-plugin` exposes 3 tools with typed schemas:
+2. **Guardrails (tool bundle)** — this repo `@leelee592/dsh-obsidian-plugin` exposes 3 tools with typed schemas:
    - `obsidian_plugin_scaffold` — generate a skeleton from the obsidian-sample-plugin template
    - `obsidian_plugin_validate` — structural validation + eslint-plugin-obsidianmd checks
    - `obsidian_plugin_version` — sync versions across three files
@@ -22,7 +22,7 @@ Two complementary, single-purpose parts:
 └───────▲──────────────────────────▲─────────┘
         │ tool bundle             │ skill discovery
 ┌───────┴──────────────────────┐  ┌────────┴───────────────────┐
-│ @leelee/dsh-obsidian-plugin │  │ obsidian-plugin skill       │
+│ @leelee592/dsh-obsidian-plugin │  │ obsidian-plugin skill       │
 │  scaffold/validate/version  │  │  SKILL.md + reference/*     │
 └─────────────────────────────┘  └─────────────────────────────┘
 ```
@@ -32,7 +32,7 @@ Two complementary, single-purpose parts:
 ```
 .
 ├── package.json          # dsh.bundle manifest + scripts + peerDeps
-├── cordis.patch.yml      # insert obsidian-plugin -> @leelee/dsh-obsidian-plugin
+├── cordis.patch.yml      # insert obsidian-plugin -> @leelee592/dsh-obsidian-plugin
 ├── tsconfig.json         # tsc -> lib/
 ├── pnpm-lock.yaml        # pnpm lockfile
 ├── src/
