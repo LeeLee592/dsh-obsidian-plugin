@@ -2,17 +2,14 @@
 
 [![Listed on dsh-plugin.org](https://dsh-plugin.org/badges/listed.svg)](https://dsh-plugin.org/plugins/LeeLee592/dsh-obsidian-plugin)
 
-给 DeepSeek Harness（DSH）的智能体提供 **Obsidian 插件开发能力**：脚手架、校验、版本同步。
+给 DeepSeek Harness（DSH）智能体提供 Obsidian 插件开发能力：脚手架、校验、版本同步，并配套开发规范 skill。
 
-## 功能
+## 主要功能
 
-安装后，DSH 智能体新增 3 个工具，用于可靠地开发 Obsidian 插件：
-
-- `obsidian_plugin_scaffold` —— 基于官方 obsidian-sample-plugin 模板生成合规插件骨架（14 个文件），内置命名/提交规则校验。
-- `obsidian_plugin_validate` —— 校验 manifest 必填字段、命名与提交规则（id/name/description）、`versions.json` 映射与 `package.json` 版本一致性，并运行 eslint-plugin-obsidianmd 检查。
-- `obsidian_plugin_version` —— 同步 `manifest.json` / `versions.json` / `package.json` 三处版本。
-
-另配套 `obsidian-plugin` skill（知识库，内置于 `.agents/skills/obsidian-plugin`，源自 [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill)）：Obsidian API、命名/提交规则、无障碍、社区提交与 Scorecard 指南。
+- **`obsidian-plugin` skill**（知识库，源自 [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill)）：提供 Obsidian 插件开发的规范指导，引导 agent 何时、如何开发插件。
+- **`obsidian_plugin_scaffold`**：使用官方 [obsidianmd/obsidian-sample-plugin](https://github.com/obsidianmd/obsidian-sample-plugin) 模板生成合规插件骨架，内置命名/提交规则校验。
+- **`obsidian_plugin_validate`**：校验 manifest 必填字段、命名规则、`versions.json` 映射与 `package.json` 版本一致性，并使用官方 [obsidianmd/eslint-plugin](https://github.com/obsidianmd/eslint-plugin)（eslint-plugin-obsidianmd）检查代码。
+- **`obsidian_plugin_version`**：同步 `manifest.json` / `versions.json` / `package.json` 三处版本。
 
 ## 安装
 
@@ -20,25 +17,9 @@
 dsh plugin --profile web add @leelee/dsh-obsidian-plugin
 ```
 
-从源码开发 / 未发布到 registry 时：
-
-```bash
-git clone https://github.com/LeeLee592/dsh-obsidian-plugin.git && cd dsh-obsidian-plugin
-pnpm install
-pnpm run deploy
-```
-
-`pnpm run deploy` 依次执行：`tsc -> lib/`、`dsh plugin --profile web add "$(pwd)"`、`dsh --profile web --dump-config` 并校验输出包含 `obsidian-plugin`。`obsidian-plugin` skill 已内置于 `.agents/skills/obsidian-plugin`，DSH 会自动发现，无需额外安装。默认 profile 为 `web`，可用 `DSH_PROFILE=<name> pnpm run deploy` 或 `pnpm run deploy -- <name>` 覆盖。
-
-重启以加载工具：
-
-```bash
-dsh web
-```
-
 ## 使用
 
-对 DSH 说「帮我新建一个 Obsidian 插件…」，agent 会加载 `obsidian-plugin` skill 获取规范，并用 `obsidian_plugin_scaffold` / `obsidian_plugin_validate` / `obsidian_plugin_version` 完成脚手架、校验与版本管理。
+对 DSH 说「帮我新建一个 Obsidian 插件…」，agent 会加载 `obsidian-plugin` skill，按照 *Obsidian Plugin Development Guidelines* 的指导进行插件开发，并在过程中调用 `obsidian_plugin_scaffold` / `obsidian_plugin_validate` / `obsidian_plugin_version` 完成脚手架、校验与版本管理。
 
 配置项 `defaultMinAppVersion`（默认 `1.13.0`）可在 profile 的 `cordis.patch.yml` 按 id 覆盖：
 
@@ -48,11 +29,11 @@ dsh web
     defaultMinAppVersion: '1.14.0'
 ```
 
-## 权限与风险
+## 文档
 
-- 注入 `["tools", "fs"]`：通过 `ctx.fs` 读写文件系统（受 DSH 沙箱约束），用于脚手架 / 校验 / 版本同步。
-- 无外部网络调用，工具本身不访问任何远程服务。
-- peer 依赖（`@deepseek-ai/cordis` / `dsh-tools` / `schemastery`）由 DSH 安装目录解析，不随包分发。
+- `doc/harness.default.md` —— 插件的 HARNESS 会话上下文（定位 / 能力 / 使用规则）。
+- `doc/version-notes.json` —— 历史版本更新说明（最新在上，中英双语）。
+- `doc/manual.{zh,en}.txt` —— 使用手册。
 
 ## 兼容性
 
@@ -61,31 +42,8 @@ dsh web
 | profile | `web` |
 | DeepSeek Harness | 0.1.5-rc 实测 |
 | peer deps | `@deepseek-ai/cordis` ^4.0.2 · `@deepseek-ai/dsh-tools` ^0.1.5-rc.2 · `@deepseek-ai/schemastery` ^3.18.2 |
+| 权限 | 注入 `tools` + `fs`（受 DSH 沙箱约束，无外部网络调用） |
 | Node（开发构建） | 20+ |
 | License | MIT |
-
-## 真实输出
-
-`pnpm run deploy`：
-
-```text
-==> build (tsc -> lib/)
-==> register checkout into profile 'web'
-+ @leelee/dsh-obsidian-plugin link:.../dsh-obsidian-plugin
-==> verify: dump-config should contain 'obsidian-plugin'
-deploy: OK — 'obsidian-plugin' registered in profile 'web'
-```
-
-`obsidian_plugin_scaffold`：
-
-```text
-Scaffolded my-plugin into /path/to/my-plugin (14 files). Next: cd my-plugin && pnpm install && pnpm run dev
-```
-
-## 文档
-
-- `doc/harness.default.md` —— 插件的 HARNESS 会话上下文（定位 / 能力 / 使用规则）。
-- `doc/version-notes.json` —— 历史版本更新说明（最新在上，中英双语）。
-- `doc/manual.{zh,en}.txt` —— 使用手册。
 
 详见 [DESIGN.md](DESIGN.md)。
