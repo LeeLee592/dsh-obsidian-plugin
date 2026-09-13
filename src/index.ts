@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import z from "@deepseek-ai/schemastery";
 import { defineTool } from "@deepseek-ai/dsh-tools";
 import { readBundleDoc } from "./bundle-doc.js";
@@ -126,6 +127,50 @@ const TEMPLATE_FILES = [
 function readTemplate(fileName: string): string {
   const url = new URL(`../assets/templates/${fileName}`, import.meta.url);
   return readFileSync(url, "utf8").replace(/^\uFEFF/, "");
+}
+
+// ---- skill registration ---------------------------------------------------
+// The obsidian-plugin skill ships in .agents/skills/ (discoverable via the
+// project-agents root when this repo IS the project root). To also make it
+// available regardless of the caller's project root, register it as a runtime
+// skill during apply(). Project entries outrank runtime entries, so there is
+// no conflict when both paths see it.
+
+function readSkillFile(): string {
+  const url = new URL("../.agents/skills/obsidian-plugin/SKILL.md", import.meta.url);
+  return readFileSync(url, "utf8").replace(/^\uFEFF/, "");
+}
+
+function skillDir(): string {
+  return fileURLToPath(new URL("../.agents/skills/obsidian-plugin/", import.meta.url));
+}
+
+function parseSkill(md: string): { name: string; description: string; content: string } {
+  const match = /^---\s*\n([\s\S]*?)\n---\s*\n?([\s\S]*)$/.exec(md);
+  if (!match) return { name: "obsidian-plugin", description: "", content: md };
+  const front = match[1];
+  const content = match[2].trimStart();
+  const name = (/^name:\s*(.+)$/m.exec(front) ?? [])[1]?.trim() ?? "obsidian-plugin";
+  const description = (/^description:\s*(.+)$/m.exec(front) ?? [])[1]?.trim() ?? "";
+  return { name, description, content };
+}
+
+function registerSkill(ctx: any): void {
+  const skills = ctx?.get?.("skills");
+  if (typeof skills?.register !== "function") return;
+  try {
+    const { name, description, content } = parseSkill(readSkillFile());
+    if (!name || !description) return;
+    skills.register({
+      name,
+      description,
+      content,
+      source: "runtime",
+      resourceBase: { kind: "directory", path: skillDir() },
+    });
+  } catch {
+    // skill 注册失败不影响工具注册
+  }
 }
 
 
@@ -330,6 +375,8 @@ const textOutput = {
 export function apply(ctx: any, config: any) {
   const fs = new Fs(ctx?.fs);
   const cfg = (config ?? {}) as { defaultMinAppVersion?: string };
+
+  registerSkill(ctx);
 
   function makeCall(exec: any): FsCall {
     const session = exec?.agent?.session;
