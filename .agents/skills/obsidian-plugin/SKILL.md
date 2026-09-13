@@ -1,378 +1,51 @@
 ---
 name: obsidian-plugin
-description: Comprehensive guidelines for Obsidian plugin development including ESLint rules from eslint-plugin-obsidianmd v0.4.1, TypeScript best practices, memory management, API usage (requestUrl vs fetch), UI/UX standards, submission process, and Scorecard optimization. Use when working with Obsidian plugins, main.ts files, manifest.json, Plugin class, vault operations, or any Obsidian API development. Pair with the obsidian_plugin_scaffold, obsidian_plugin_validate, and obsidian_plugin_version tools for scaffolding, validating, and versioning.
+description: Guidelines for developing, validating, and submitting Obsidian community plugins. Covers plugin authoring best practices (memory management, type safety, UI/UX, file & vault operations, CSS, accessibility, code quality) and submission & validation (eslint-plugin-obsidianmd rules, community scanner, manifest/naming requirements). Use when working with Obsidian plugins, main.ts, manifest.json, Plugin class, or vault operations. Pair with the obsidian_plugin_scaffold, obsidian_plugin_validate, and obsidian_plugin_version tools.
 license: MIT
-metadata: 
+metadata:
   version: 1.10.1
 ---
 
 # Obsidian Plugin Development Guidelines
 
-Follow these comprehensive guidelines derived from the official Obsidian ESLint plugin rules, submission requirements, and best practices.
+本 skill 提供 Obsidian 社区插件的开发、校验与提交规范：实现功能时遵循下方「插件编写规范」，提交前用 DSH 工具与「校验与提交」表格完成检查。
 
-## Working with the DSH Tools
+## DSH Tools
 
-This skill pairs with three tools from the `@leelee/dsh-obsidian-plugin` bundle. Use them for the deterministic operations; this skill supplies the rules and guidelines those tools enforce.
+与本 skill 配套的三个确定性工具（参数由 DSH 调用时自行确认）：
 
-### When to call which tool
+| 工具 | 用途 |
+|---|---|
+| `obsidian_plugin_scaffold` | 基于官方 obsidian-sample-plugin 模板生成合规插件骨架，内置命名/提交规则校验 |
+| `obsidian_plugin_validate` | 校验 manifest 必填字段、命名规则、versions.json 映射、package.json 版本一致性，并运行 eslint-plugin-obsidianmd 检查 |
+| `obsidian_plugin_version` | 同步 manifest.json / versions.json / package.json 三处版本 |
 
-| When / scenario | Tool | Key parameters |
+优先使用这些工具而非手工编辑文件；工具的命名/提交规则与本 skill 的规范一致。
+
+## Workflow
+
+1. **脚手架** — 新建插件时调用 `obsidian_plugin_scaffold`（先确认 id/name/description 符合命名规则）。
+2. **实现** — 按「插件编写规范」编写功能代码。
+3. **校验** — 调用 `obsidian_plugin_validate` 检查结构与命名并运行 eslint；按返回错误修正后重跑，直到通过。
+4. **版本** — 发布时调用 `obsidian_plugin_version` 统一升级版本号。
+5. **提交** — 按「校验与提交」表格完成社区扫描与发布准备。
+
+## 插件编写规范
+
+| 规范主题 | 参考文件 | 核心要点 |
 |---|---|---|
-| User asks to create a new Obsidian plugin | `obsidian_plugin_scaffold` | `targetDir`, `id`, `name`, `description`, `author` |
-| Validate an existing plugin / pre-submission self-check | `obsidian_plugin_validate` | `projectDir` |
-| Publish a new release / bump the version | `obsidian_plugin_version` | `projectDir`, `version`, `minAppVersion?` |
-
-### Parameter sources
-
-- `id` / `name` / `description`: ask the user first if not provided, or infer from the project directory name / conversation context; they must satisfy the "Submission & Naming" rules below.
-- `targetDir` / `projectDir`: the Obsidian plugin project directory, defaulting to the current workspace.
-- `version`: the target semver, e.g. `1.1.0`.
-
-### Error loop
-
-Naming or version errors returned by `obsidian_plugin_scaffold` / `obsidian_plugin_validate` map to the "Submission & Naming" and "Plugin Submission Validation Workflow" rules below; fix per those rules and re-run until clean.
-
-### Tool reference
-
-- `obsidian_plugin_scaffold` — Generate a submission-ready plugin skeleton from the official obsidian-sample-plugin template (14 files). It validates id/name/description against the naming rules below before writing.
-- `obsidian_plugin_validate` — Validate an existing plugin: manifest required fields, naming/submission rules (id/name/description), `versions.json` mapping, `package.json` version consistency, and eslint-plugin-obsidianmd lint checks.
-- `obsidian_plugin_version` — Bump the version consistently across `manifest.json`, `versions.json`, and `package.json`.
-
-Prefer these tools over hand-editing files for scaffold, validation, and version bumps. The naming/submission rules below are the same rules the tools enforce.
-
----
-
-## Rules Reference (eslint-plugin-obsidianmd v0.4.1)
-
-### Submission & Naming
-| # | Rule | ✅ Do | ❌ Don't |
-|---|------|--------|----------|
-| 1 | Plugin ID | Omit "obsidian"; don't end with "plugin" | Include "obsidian" or end with "plugin" |
-| 2 | Plugin name | Omit "Obsidian"; don't end with "Plugin" | Include "Obsidian" or end with "Plugin" |
-| 3 | Plugin name | Don't start with "Obsi" or end with "dian" | Start with "Obsi" or end with "dian" |
-| 4 | Description | Omit "Obsidian", "This plugin", etc. | Use "Obsidian" or "This plugin" |
-| 5 | Description | End with `.?!)` punctuation | Leave description without terminal punctuation |
-
-### Memory & Lifecycle
-| # | Rule | ✅ Do | ❌ Don't |
-|---|------|--------|----------|
-| 6 | Event cleanup | Use `registerEvent()` for automatic cleanup | Register events without cleanup |
-| 6a | DOM events | Use `registerDomEvent()` on the plugin or owning component | Pair `addEventListener` with manual `removeEventListener` cleanup |
-| 7 | View references | Return views/components directly | Store view references in plugin properties or pass plugin as component to `MarkdownRenderer` |
-| 8 | Leaf detachment | Let Obsidian handle leaf cleanup | Call `detachLeavesOfType()` in `onunload` |
-
-### Type Safety
-| # | Rule | ✅ Do | ❌ Don't |
-|---|------|--------|----------|
-| 9 | TFile/TFolder | Use `instanceof` for type checking | Cast to TFile/TFolder; use `any`; use `var` |
-| 10 | DOM instanceof | Use `.instanceOf(T)` for DOM Nodes/UIEvents | Use `instanceof` for cross-window DOM checks |
-
-### UI/UX
-| # | Rule | ✅ Do | ❌ Don't |
-|---|------|--------|----------|
-| 11 | UI text | Sentence case — "Advanced settings" | Title Case — "Advanced Settings" |
-| 12 | JSON locale | Sentence case in JSON locale files (`recommendedWithLocalesEn`) | Title case in locale JSON |
-| 13 | TS/JS locale | Sentence case in TS/JS locale modules | Title case in locale modules |
-
-> **Note (v0.4.0):** `ui/sentence-case` is now enabled (`warn`) and enforced on inline UI strings — it was disabled in v0.3.0. Use the `recommendedWithLocalesEn` config to also check English locale files (rules 12–13).
-| 14 | Command names | Omit "command" in command names/IDs | Include "command" in names/IDs |
-| 15 | Command IDs | Omit plugin ID/name from command IDs/names | Duplicate plugin ID in command IDs |
-| 16 | Hotkeys | No default hotkeys | Set default hotkeys |
-| 17 | Settings headings | Use `.setHeading()` | Create manual HTML headings; use "General", "settings", or plugin name in headings |
-
-### Declarative Settings (1.13.0+)
-
-All four `settings-tab` rules ship as `warn` in `recommended`. Rules 17a/17c/17d read `minAppVersion` from `manifest.json`; 17b is **not** version-gated.
-
-| # | Rule | ✅ Do | ❌ Don't |
-|---|------|--------|----------|
-| 17a | `settings-tab/require-display` | Keep `display()` when `minAppVersion < 1.13.0` | Ship declarative-only settings that render nothing on older Obsidian |
-| 17b | `settings-tab/prefer-setting-definitions` | Implement `getSettingDefinitions()` on every `PluginSettingTab` | Rely on `display()` alone — settings won't appear in 1.13+ global search |
-| 17c | `settings-tab/prefer-update-over-display` | Call `this.update()` to re-render declarative settings | Call `this.display()` — it's bypassed when definitions are non-empty |
-| 17d | `settings-tab/no-deprecated-display` | Delete `display()` once `minAppVersion >= 1.13.0` and definitions exist | Leave a dead `display()` behind (auto-fixable) |
-| — | Settings data | Keep all persisted data inside `plugin.settings` | Store sibling keys via `saveData()` — auto-persist clobbers them |
-
-> **Detection caveat:** these rules match a bare `extends PluginSettingTab` only. `extends obsidian.PluginSettingTab` is out of scope and won't be flagged — but the underlying guidance still applies.
-
-### API Best Practices
-| # | Rule | ✅ Do | ❌ Don't |
-|---|------|--------|----------|
-| 18 | Active file edits | Use Editor API | Use `Vault.modify()` for active file edits |
-| 19 | Background file mods | Use `Vault.process()` | Use `Vault.modify()` for background modifications |
-| 20 | File deletion | Use `FileManager.trashFile()` | Use `Vault.trash()` or `Vault.delete()` directly |
-| 21 | File lookup | Use `Vault.getAbstractFileByPath()` | Iterate all files with `Vault.getFiles().find()` |
-| 22 | User paths | Use `normalizePath()` | Hardcode `.obsidian` path; use raw user paths |
-| 23 | OS detection | Use `Platform` API | Use `navigator.platform`/`userAgent` |
-| 24 | Network requests | Use `requestUrl()` | Use `fetch()` |
-| 25 | Logging | Minimize console logging; none in `onload`/`onunload` in production | Use `console.log` in `onload`/`onunload` |
-| 26 | Input suggest | Use built-in `AbstractInputSuggest` | Copy Liam's `TextInputSuggest` implementation |
-| 27 | API compatibility | Check `minAppVersion` for API availability (e.g., `getSettingDefinitions()` requires 1.13.0) | Use APIs not available in declared minAppVersion |
-| 28 | Language detection | Use Obsidian's `getLanguage()` | Use `localStorage.getItem('language')` or `i18next-browser-languagedetector` |
-
-### Popout Window Compatibility
-| # | Rule | ✅ Do | ❌ Don't |
-|---|------|--------|----------|
-| 29 | Document/Window | Use `activeDocument` and `activeWindow` | Use global `document` and `window` |
-| 29a | Getter capture | Capture `activeDocument` in a variable when the same document is needed later | Call `activeDocument` at setup and again at cleanup — it follows focus and may return different documents |
-| 30 | Timers | Use `activeWindow.setTimeout()`, `setInterval()`, etc. | Use bare `setTimeout()`, `setInterval()` |
-| 31 | Main workspace UI | Use `this.app.workspace.containerEl.ownerDocument` from settings | Use `activeDocument` to update main workspace from settings window |
-
-> **Note (v0.4.0):** `prefer-active-doc` remains disabled by default — the only Obsidian rule shipped as `off`. Enable it manually for popout window support.
-
-> **Note (v1.13.0):** Settings now open in a new window. `activeDocument` from settings callbacks points to the settings window, not the main vault. Use `this.app.workspace.containerEl.ownerDocument` to target main workspace UI.
-
-> **Note:** `activeDocument`/`activeWindow` are dynamic getters that track the focused window. A listener added via `activeDocument.addEventListener()` at setup cannot reliably be removed via `activeDocument.removeEventListener()` at cleanup. Prefer `registerDomEvent()` (rule 6a), which captures the target at registration.
-
-### Event Handling
-| # | Rule | ✅ Do | ❌ Don't |
-|---|------|--------|----------|
-| 31 | Editor drop/paste | Check `evt.defaultPrevented` and call `evt.preventDefault()` | Handle editor-drop/paste without checking defaultPrevented |
-
-### Styling
-| # | Rule | ✅ Do | ❌ Don't |
-|---|------|--------|----------|
-| 32 | CSS variables | Use Obsidian CSS variables for all styling | Hardcode colors, sizes, or spacing |
-| 33 | CSS scope | Scope CSS to plugin containers | Use broad CSS selectors |
-| 34 | Style elements | Use `styles.css` file (`no-forbidden-elements`) | Create `<link>` or `<style>` elements; assign styles via JavaScript |
-| 34a | `!important` | Increase selector specificity or use CSS variables | Use `!important` — overrides user themes/snippets |
-| 34b | `:has` selector | Toggle classes from TypeScript when conditions change | Use `:has` — causes broad selector invalidation and performance issues |
-
-### Security & Compatibility
-| # | Rule | ✅ Do | ❌ Don't |
-|---|------|--------|----------|
-| 35 | DOM creation | Use Obsidian DOM helpers (`createEl()`, `createDiv()`, `createSpan()`, `createSvg()`, `createFragment()`) via `prefer-create-el`; linter autofixes `activeDocument.createElement()` → `activeWindow.createEl()` (v0.4.1) | Use `document.createElement()`, `document.createDocumentFragment()`, etc. |
-| 36 | Node.js modules | Guard Node.js imports with `Platform.isDesktop` check (`no-nodejs-modules`) | Import Node.js modules without platform guard |
-| 37 | iOS compat | Avoid regex lookbehind (iOS < 16.4 incompatibility) | Use regex lookbehind |
-
-### Accessibility (MANDATORY)
-| # | Rule | ✅ Do | ❌ Don't |
-|---|------|--------|----------|
-| 38 | Keyboard access | Make all interactive elements keyboard accessible; Tab through all elements | Create inaccessible interactive elements |
-| 39 | ARIA labels | Provide ARIA labels for icon buttons; use `data-tooltip-position` for tooltips | Use icon buttons without ARIA labels |
-| 40 | Focus indicators | Use `:focus-visible` with Obsidian CSS variables; touch targets ≥ 44×44px | Remove focus indicators; make touch targets < 44×44px |
-
-### Code Quality
-| Rule | ✅ Do | ❌ Don't |
-|------|--------|----------|
-| Sample code | Remove all sample/template code | Keep class names like MyPlugin, SampleModal |
-| Object.assign | `Object.assign({}, defaults, overrides)` (`object-assign`) | `Object.assign(defaultsVar, other)` — mutates defaults |
-| LICENSE | Copyright holder must not be "Dynalist Inc."; year must be current (`validate-license`) | Leave "Dynalist Inc." as holder or use an outdated year |
-| Async | Use async/await | Use Promise chains |
-| Deprecated packages | Replace flagged npm packages with Node.js built-ins (e.g., `builtin-modules` → `import { builtinModules } from "node:module"`) | Use packages the scanner flags as replaceable |
-
----
-
-## Detailed Guidelines
-
-For comprehensive information on specific topics, see the reference files:
-
-### [Memory Management & Lifecycle](reference/memory-management.md)
-- Using `registerEvent()`, `addCommand()`, `registerDomEvent()`, `registerInterval()`
-- `registerDomEvent()` vs manual `addEventListener` (and the `activeDocument` drift bug)
-- Avoiding view references in plugin
-- Not using plugin as component
-- Proper leaf cleanup
-
-### [Type Safety](reference/type-safety.md)
-- Using `instanceof` instead of type casting
-- Avoiding `any` type
-- Using `const` and `let` over `var`
-
-### [UI/UX Standards](reference/ui-ux.md)
-- Sentence case enforcement (TypeScript, JSON locale, TS/JS locale modules)
-- `recommendedWithLocalesEn` config for locale file checks
-- Command naming conventions (no "command", no plugin name, no plugin ID)
-- Settings and configuration best practices
-- Declarative settings API (1.13+): migration paths, control types, pitfalls
-
-### [File & Vault Operations](reference/file-operations.md)
-- View access patterns
-- Editor vs Vault API
-- Atomic file operations
-- File management
-- Path handling
-
-### [CSS Styling Best Practices](reference/css-styling.md)
-- Avoiding inline styles
-- Using Obsidian CSS variables
-- Avoiding `!important` (use specificity or CSS variables)
-- Avoiding `:has` selector (toggle classes from TypeScript instead)
-- Scoping plugin styles
-- Theme support
-- Spacing and layout
-
-### [Accessibility (A11y)](reference/accessibility.md)
-- Keyboard navigation (MANDATORY)
-- ARIA labels and roles (MANDATORY)
-- Tooltips and accessibility
-- Focus management (MANDATORY)
-- Focus visible styles (MANDATORY)
-- Screen reader support (MANDATORY)
-- Mobile and touch accessibility (MANDATORY)
-- Accessibility checklist
-
-### [Code Quality & Best Practices](reference/code-quality.md)
-- Removing sample code
-- Security best practices
-- Platform compatibility
-- API usage best practices
-- Async/await patterns
-- DOM helpers
-- Deprecated/replaceable packages (e.g., `builtin-modules` → `node:module`)
-
-### [Plugin Submission Requirements](reference/submission.md)
-- Repository structure
-- Submission process
-- Semantic versioning
-- Testing checklist
-- Additional resources and important notes
-
-### [Community Plugin Scanner](reference/community-scanner.md)
-- What the scanner runs (ESLint rule sets + checks beyond ESLint)
-- Scorecard system (Health, Review, Disclosures, improvement tips)
-- Version-stamped — the single file to update as the scanner evolves
-
-### [ESLint Setup Guide](reference/eslint-setup.md)
-- Complete ESLint config for community scanner compliance
-- Why `typescript-eslint` recommendedTypeChecked is required
-- Common violations and fixes (floating promises, require imports, etc.)
-- Popout window compatibility rules
-
----
-
-## Plugin Submission Validation Workflow
-
-Before submitting a plugin, follow this sequence:
-
-1. **Run ESLint** — `npx eslint .` using `eslint-plugin-obsidianmd`; fix all errors AND warnings (warnings affect your Scorecard)
-2. **Validate manifest** — Confirm `id`, `name`, `description`, `version`, and `minAppVersion` meet naming and formatting rules (rules 1–5)
-3. **Check LICENSE** — Copyright holder must not be "Dynalist Inc." and the year must be current
-4. **Test on mobile** — Verify no regex lookbehind, no `fetch()`, and touch targets ≥ 44×44px (skip only if plugin is declared desktop-only)
-5. **Keyboard accessibility audit** — Tab through all interactive elements; confirm focus indicators and ARIA labels are present
-6. **Create GitHub Release** — Tag must match `manifest.json` version; attach `main.js`, `manifest.json`, and `styles.css` (optional)
-7. **Submit via community.obsidian.md** — Sign in, link GitHub account, navigate to Plugins → New plugin, enter repository URL, review Developer policies, and submit
-
-If ESLint reports new errors after fixing, re-run from step 1.
-
----
-
-## Scorecard System
-
-Published plugins receive a **Scorecard** visible on community.obsidian.md. The Scorecard affects user trust and discoverability — a poor score deters users from installing.
-
-**Key points:**
-- Aim for 90%+ overall score
-- Fix ALL ESLint warnings, not just errors — warnings are publicly visible
-- Use `typescript-eslint/recommendedTypeChecked` for type-aware checks
-- Add GitHub artifact attestation to releases
-
-See [Community Plugin Scanner](reference/community-scanner.md) for full details on scanner checks, Health metrics, Review checks, common warnings, and improvement tips.
-
----
-
-## When Reviewing/Writing Code
-
-Use this checklist for code review and implementation:
-
-1. **Memory management**: Are components and views properly managed?
-2. **Type safety**: Using `instanceof` instead of casts?
-3. **UI text**: Is everything in sentence case?
-4. **Command naming**: No redundant words?
-5. **File operations**: Using preferred APIs?
-6. **Mobile compatibility**: No iOS-incompatible features?
-7. **Sample code**: Removed all boilerplate?
-8. **Manifest**: Correct version, valid structure?
-9. **Accessibility**: Keyboard navigation, ARIA labels, focus indicators?
-10. **Testing**: Can you use the plugin without a mouse?
-11. **Touch targets**: Are all interactive elements at least 44×44px?
-12. **Focus styles**: Using `:focus-visible` and proper CSS variables?
-13. **Settings**: Using declarative `getSettingDefinitions()` on 1.13+? All saved data co-located in `plugin.settings`?
-
----
-
-## Common Patterns
-
-### Proper Command Registration
-
-```typescript
-// ✅ CORRECT
-this.addCommand({
-  id: 'insert-timestamp',
-  name: 'Insert timestamp',
-  editorCallback: (editor: Editor, view: MarkdownView) => {
-    editor.replaceSelection(new Date().toISOString());
-  }
-});
-```
-
-### Safe Type Narrowing
-
-```typescript
-// ✅ CORRECT
-const file = this.app.vault.getAbstractFileByPath(path);
-if (file instanceof TFile) {
-  // TypeScript now knows it's a TFile
-  await this.app.vault.read(file);
-}
-```
-
-### Keyboard Accessible Button
-
-```typescript
-// ✅ CORRECT
-const button = containerEl.createEl('button', {
-  attr: {
-    'aria-label': 'Open settings',
-    'data-tooltip-position': 'top'
-  }
-});
-button.setText('⚙️');
-
-button.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' || e.key === ' ') {
-    e.preventDefault();
-    performAction();
-  }
-});
-```
-
-### Declarative Settings (1.13+)
-
-```typescript
-// ✅ CORRECT — getSettingDefinitions() replaces display() on 1.13+
-getSettingDefinitions() {
-  return [
-    {
-      name: 'Mode',
-      control: {
-        type: 'dropdown',
-        key: 'mode',
-        defaultValue: 'fast',
-        options: { fast: 'Fast', thorough: 'Thorough' },
-      },
-    },
-  ];
-}
-```
-
-### Themed CSS
-
-```css
-/* ✅ CORRECT */
-.my-plugin-modal {
-  background: var(--modal-background);
-  color: var(--text-normal);
-  padding: var(--size-4-4);
-  border-radius: var(--radius-m);
-  font-size: var(--font-ui-medium);
-}
-
-.my-plugin-button:focus-visible {
-  outline: 2px solid var(--interactive-accent);
-  outline-offset: 2px;
-}
-```
-
----
-
-When helping with Obsidian plugin development, proactively apply these rules and suggest improvements based on these guidelines. Refer to the detailed reference files for comprehensive information on specific topics.
+| 内存与生命周期 | `reference/memory-management.md` | 用 `registerEvent()` / `registerDomEvent()` / `registerInterval()` 自动清理；避免把 view 引用存进插件属性；不手动 `detachLeavesOfType()` |
+| 类型安全 | `reference/type-safety.md` | 用 `instanceof` 收窄 TFile/TFolder；DOM 节点用 `.instanceOf(T)`；避免 `any` 与 `var` |
+| UI/UX 规范 | `reference/ui-ux.md` | UI 文本用句子大小写；命令名不含 "command"、不重复插件名；1.13+ 用声明式 `getSettingDefinitions()` |
+| 文件与 Vault 操作 | `reference/file-operations.md` | 活动文件编辑走 Editor API、后台修改走 `Vault.process()`；删除用 `FileManager.trashFile()`；查找用 `getAbstractFileByPath()` |
+| CSS 样式 | `reference/css-styling.md` | 用 Obsidian CSS 变量；选择器作用域到插件容器；避免 `!important` 与 `:has` |
+| 无障碍（必做） | `reference/accessibility.md` | 键盘可访问；图标按钮加 ARIA label；`:focus-visible` + 触控目标 ≥ 44×44px |
+| 代码质量 | `reference/code-quality.md` | 移除示例代码；用 async/await；用 `createEl()` 等 DOM helpers；替换废弃包 |
+
+## 校验与提交
+
+| 事项 | 参考文件 | 注意事项与修复方式 |
+|---|---|---|
+| ESLint 配置 | `reference/eslint-setup.md` | 本地 `npx eslint .` 须与社区扫描器一致：使用 `...obsidianmd.configs.recommended`（已内置 typescript-eslint type-checked 规则）；修复 floating promises、require imports 等常见违规 |
+| 社区扫描器 | `reference/community-scanner.md` | 扫描器按 release 生成 Scorecard（Health / Review / Disclosures）；`recommended` 即扫描器规则集；目标 90%+，修复所有 warning（warning 公开可见） |
+| 提交要求 | `reference/submission.md` | 仓库需 `manifest.json` + `main.js` + `styles.css` + `LICENSE`；语义化版本；GitHub Release tag 匹配 manifest 版本；经 community.obsidian.md 提交 |
