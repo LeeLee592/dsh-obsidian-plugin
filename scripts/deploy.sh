@@ -5,8 +5,6 @@
 #   pnpm run deploy                       # 部署到默认 profile（web）
 #   DSH_PROFILE=<name> pnpm run deploy    # 用环境变量指定 profile
 #   pnpm run deploy -- <name>             # 用位置参数指定 profile
-#
-# 等价于之前的四步：build -> dsh plugin add -> dump-config 验证。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -19,11 +17,7 @@ echo "==> build (tsc -> lib/)"
 pnpm run build
 
 # obsidian-plugin skill 已内置于 .agents/skills/obsidian-plugin（project-agents root），
-# DSH 会自动发现，无需软链安装。
-
-# 清理历史包名（rename 前），避免与新名重复 link；不存在则忽略。
-dsh plugin --profile "$PROFILE" remove "@dsh-obsidian/tool" >/dev/null 2>&1 || true
-dsh plugin --profile "$PROFILE" remove "dsh-obsidian-plugin" >/dev/null 2>&1 || true
+# DSH 会自动发现，无需额外安装。
 
 echo "==> register checkout into profile '$PROFILE'"
 dsh plugin --profile "$PROFILE" add "$ROOT"
@@ -37,4 +31,4 @@ else
 fi
 
 echo
-echo "next: dsh --profile $PROFILE   # 重启后模型工具集多出 3 个 obsidian_* 工具"
+echo "next: dsh --profile $PROFILE   # 重启后模型工具集多出 3 个 obsidian_plugin_* 工具"

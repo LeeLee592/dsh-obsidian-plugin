@@ -2,21 +2,17 @@
 ==========================================
 
 【What it is】
-Three tools that give a DeepSeek Harness agent the ability to develop Obsidian plugins:
+A DeepSeek Harness capability for developing Obsidian plugins, with one knowledge skill and three tools:
+
+- obsidian-plugin skill (knowledge): Obsidian plugin development guidelines (naming/submission rules, accessibility, code quality, submission & Scorecard) that guide the agent's workflow.
 - obsidian_plugin_scaffold: generate a compliant plugin skeleton from the official obsidian-sample-plugin template (14 files), with built-in naming/submission checks.
-- obsidian_plugin_validate: validate the manifest's required fields, naming/submission rules (id/name/description), the versions.json mapping, package.json version consistency, and eslint-plugin-obsidianmd lint checks.
+- obsidian_plugin_validate: validate the manifest's required fields, naming rules, versions.json mapping, package.json version consistency, and run eslint-plugin-obsidianmd checks.
 - obsidian_plugin_version: bump manifest.json / versions.json / package.json together.
 
 【Usage】
-Tell DSH "create an Obsidian plugin …" and the agent will:
-1. scaffold with obsidian_plugin_scaffold;
-2. validate with obsidian_plugin_validate;
-3. manage versions with obsidian_plugin_version.
+Tell DSH "create an Obsidian plugin …" and the agent loads the obsidian-plugin skill, follows the Obsidian Plugin Development Guidelines, and calls the tools along the way for scaffolding, validating, and versioning.
 
-【Naming rules】
+【Naming rules】(enforced by the tools; use for self-checks too)
 - id: lowercase letters/digits/dashes/underscores, no "obsidian", not ending with "plugin".
 - name: no "Obsidian", not ending with "Plugin", not starting with "Obsi" or ending with "dian".
 - description: no "Obsidian" / "This plugin", must end with . ? ! or ), ≤250 chars.
-
-【Config】
-defaultMinAppVersion (default 1.13.0): used by obsidian_plugin_scaffold when minAppVersion is not passed. Overridable by id in the profile's cordis.patch.yml.
