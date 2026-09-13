@@ -571,7 +571,7 @@ export function apply(ctx: any, config: any) {
 
   function makeCall(exec: any): FsCall {
     const session = exec?.agent?.session;
-    const policy = ctx?.sandboxPolicy?.resolve ? ctx.sandboxPolicy.resolve(session ? { session } : {}) : undefined;
+    const policy = ctx?.get?.("sandboxPolicy")?.resolve?.(session ? { session } : {});
     return {
       workspaceRoot: policy?.workspaceRoot ?? session?.header?.cwd,
       policy,
