@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import z from "@deepseek-ai/schemastery";
 import { defineTool } from "@deepseek-ai/dsh-tools";
@@ -42,7 +43,7 @@ export function getVersionNotes(lang: "zh" | "en" = "zh"): string {
 }
 
 const HARNESS_FALLBACK =
-  "# HARNESS · 会话上下文\n你带「Obsidian 插件开发」能力：obsidian_scaffold / obsidian_validate / obsidian_version。";
+  "# HARNESS · 会话上下文\n你带「Obsidian 插件开发」能力：obsidian_plugin_scaffold / obsidian_plugin_validate / obsidian_plugin_version。";
 
 export const HARNESS_CONTEXT = readBundleDoc("harness.default.md", HARNESS_FALLBACK);
 
@@ -102,284 +103,31 @@ export class Fs {
   }
 }
 
-// ---- embedded templates (kept in sync with packages/skill/obsidian-plugin-dev/assets/templates) ----
-// Based on gapmiss/obsidian-plugin-skill (MIT).
+// ---- template files (vendored from obsidianmd/obsidian-sample-plugin) ----
+// Scaffold reads these from assets/templates/ and fills the {{...}} placeholders.
 
-const TEMPLATES: Record<string, string> = {
-  "src/main.ts": `import { Plugin } from 'obsidian';
-import { PluginSettings, SettingsTab, DEFAULT_SETTINGS } from './settings';
+const TEMPLATE_FILES = [
+  ".editorconfig",
+  ".gitignore",
+  ".npmrc",
+  "LICENSE",
+  "esbuild.config.mjs",
+  "eslint.config.mts",
+  "manifest.json",
+  "package.json",
+  "styles.css",
+  "tsconfig.json",
+  "version-bump.mjs",
+  "versions.json",
+  "src/main.ts",
+  "src/settings.ts",
+];
 
-export default class {{PLUGIN_CLASS}}Plugin extends Plugin {
-	settings: PluginSettings;
-
-	async onload(): Promise<void> {
-		await this.loadSettings();
-
-		// Add settings tab
-		this.addSettingTab(new SettingsTab(this.app, this));
-
-		// Register commands
-		this.addCommand({
-			id: 'run-example',
-			name: 'Run example',
-			callback: () => {
-				// TODO: Implement your command
-			}
-		});
-	}
-
-	onunload(): void {
-		// Cleanup handled automatically by Obsidian
-	}
-
-	async loadSettings(): Promise<void> {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<PluginSettings>);
-	}
-
-	async saveSettings(): Promise<void> {
-		await this.saveData(this.settings);
-	}
-}
-`,
-  "src/settings.ts": `import { App, PluginSettingTab } from 'obsidian';
-import type { SettingDefinitionItem } from 'obsidian';
-import type {{PLUGIN_CLASS}}Plugin from './main';
-
-export interface PluginSettings {
-	exampleSetting: string;
+function readTemplate(fileName: string): string {
+  const url = new URL(`../assets/templates/${fileName}`, import.meta.url);
+  return readFileSync(url, "utf8").replace(/^\uFEFF/, "");
 }
 
-export const DEFAULT_SETTINGS: PluginSettings = {
-	exampleSetting: 'default'
-};
-
-export class SettingsTab extends PluginSettingTab {
-	plugin: {{PLUGIN_CLASS}}Plugin;
-
-	constructor(app: App, plugin: {{PLUGIN_CLASS}}Plugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
-	getSettingDefinitions(): SettingDefinitionItem[] {
-		return [
-			{
-				name: 'Example setting',
-				desc: 'This is an example setting',
-				control: {
-					type: 'text',
-					key: 'exampleSetting',
-					placeholder: 'Enter value'
-				}
-			}
-		];
-	}
-}
-`,
-  "manifest.json": `{
-  "id": "{{PLUGIN_ID}}",
-  "name": "{{PLUGIN_NAME}}",
-  "version": "{{PLUGIN_VERSION}}",
-  "minAppVersion": "{{MIN_APP_VERSION}}",
-  "description": "{{PLUGIN_DESCRIPTION}}",
-  "author": "{{PLUGIN_AUTHOR}}",
-  "authorUrl": "{{AUTHOR_URL}}",
-  "isDesktopOnly": false
-}
-`,
-  "styles.css": `/*
- * Styles for {{PLUGIN_ID}}
- *
- * Best practices:
- * - Use Obsidian CSS variables for all styling
- * - Scope all selectors to plugin containers
- * - Support both light and dark themes via CSS variables
- * - Follow Obsidian's 4px spacing grid (var(--size-4-*))
- */
-`,
-  "tsconfig.json": `{
-  "compilerOptions": {
-    "inlineSourceMap": true,
-    "inlineSources": true,
-    "module": "ESNext",
-    "target": "ES6",
-    "allowJs": true,
-    "noImplicitAny": true,
-    "moduleResolution": "bundler",
-    "importHelpers": true,
-    "isolatedModules": true,
-    "strictNullChecks": true,
-    "lib": ["DOM", "ES5", "ES6", "ES7"]
-  },
-  "include": ["src/**/*.ts"]
-}
-`,
-  "package.json": `{
-  "name": "{{PLUGIN_ID}}",
-  "version": "{{PLUGIN_VERSION}}",
-  "description": "{{PLUGIN_DESCRIPTION}}",
-  "main": "main.js",
-  "scripts": {
-    "dev": "node esbuild.config.mjs",
-    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-    "lint": "eslint src/",
-    "version": "node version-bump.mjs && git add manifest.json versions.json"
-  },
-  "keywords": ["obsidian", "obsidian-plugin"],
-  "author": "{{PLUGIN_AUTHOR}}",
-  "license": "MIT",
-  "devDependencies": {
-    "@eslint/js": "^9.30.1",
-    "@eslint/json": "^0.14.0",
-    "@types/node": "^22.15.17",
-    "esbuild": "^0.28.1",
-    "eslint": "^9.30.1",
-    "eslint-plugin-obsidianmd": "^0.4.1",
-    "jiti": "^2.6.1",
-    "obsidian": "latest",
-    "tslib": "^2.4.0",
-    "typescript": "^5.9.2",
-    "typescript-eslint": "^8.35.1"
-  },
-  "allowScripts": {
-    "esbuild": true
-  }
-}
-`,
-  "esbuild.config.mjs": `import esbuild from "esbuild";
-import process from "process";
-import { builtinModules } from "node:module";
-
-const banner =
-\`/*
-THIS IS A GENERATED/BUNDLED FILE BY ESBUILD
-if you want to view the source, please visit the github repository of this plugin
-*/
-\`;
-
-const prod = (process.argv[2] === "production");
-
-const context = await esbuild.context({
-	banner: {
-		js: banner,
-	},
-	entryPoints: ["src/main.ts"],
-	bundle: true,
-	external: [
-		"obsidian",
-		"electron",
-		"@codemirror/autocomplete",
-		"@codemirror/collab",
-		"@codemirror/commands",
-		"@codemirror/language",
-		"@codemirror/lint",
-		"@codemirror/search",
-		"@codemirror/state",
-		"@codemirror/view",
-		"@lezer/common",
-		"@lezer/highlight",
-		"@lezer/lr",
-		...builtinModules],
-	format: "cjs",
-	target: "es2018",
-	logLevel: "info",
-	sourcemap: prod ? false : "inline",
-	treeShaking: true,
-	outfile: "main.js",
-});
-
-if (prod) {
-	await context.rebuild();
-	process.exit(0);
-} else {
-	await context.watch();
-}
-`,
-  "eslint.config.mjs": `import { defineConfig } from "eslint/config";
-import tseslint from "typescript-eslint";
-import obsidianmd from "eslint-plugin-obsidianmd";
-
-export default defineConfig([
-    { ignores: ["node_modules/**", "main.js", "*.mjs"] },
-    ...obsidianmd.configs.recommended,
-    {
-        files: ["**/*.ts"],
-        languageOptions: {
-            parser: tseslint.parser,
-            parserOptions: {
-                project: "./tsconfig.json",
-                sourceType: "module",
-            },
-        },
-    },
-]);
-`,
-  "version-bump.mjs": `import { readFileSync, writeFileSync } from "fs";
-
-const targetVersion = process.env.npm_package_version;
-
-let manifest = JSON.parse(readFileSync("manifest.json", "utf8"));
-const { minAppVersion } = manifest;
-manifest.version = targetVersion;
-writeFileSync("manifest.json", JSON.stringify(manifest, null, "\\t"));
-
-let versions = JSON.parse(readFileSync("versions.json", "utf8"));
-versions[targetVersion] = minAppVersion;
-writeFileSync("versions.json", JSON.stringify(versions, null, "\\t"));
-`,
-  "versions.json": `{
-  "{{PLUGIN_VERSION}}": "{{MIN_APP_VERSION}}"
-}
-`,
-  ".gitignore": `# Logs
-*.log
-npm-debug.log*
-
-# Dependency directories
-node_modules/
-
-# Build output
-main.js
-*.js.map
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# IDE
-.vscode/
-.idea/
-
-# TypeScript cache
-*.tsbuildinfo
-
-# Privacy
-data.json
-.env
-`,
-  "LICENSE": `MIT License
-
-Copyright (c) {{YEAR}} {{PLUGIN_AUTHOR}}
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-`,
-};
 
 // ---- shared helpers -------------------------------------------------------
 
@@ -472,10 +220,10 @@ export async function scaffold(fs: Fs, args: ScaffoldArgs, call: FsCall = {}): P
   const target = await fs.resolve(args.targetDir, call.workspaceRoot);
   let created = 0;
   try {
-    for (const [file, template] of Object.entries(TEMPLATES)) {
+    for (const file of TEMPLATE_FILES) {
       const dest = join(target, file);
       if (file === ".gitignore" || !(await fs.exists(dest))) {
-        await fs.writeText(dest, render(template, vars), call.policy, call.signal);
+        await fs.writeText(dest, render(readTemplate(file), vars), call.policy, call.signal);
         created++;
       }
     }
@@ -517,6 +265,20 @@ export async function validateProject(fs: Fs, args: { projectDir: string }, call
   const pkg = await fs.readJson(join(dir, "package.json"));
   if (!pkg) problems.push("package.json: not found or invalid JSON");
   else if (manifest.version && pkg.version !== manifest.version) problems.push(`package.json: version "${pkg.version}" != manifest "${manifest.version}"`);
+
+  // eslint-plugin-obsidianmd 检查（借用项目自身的 eslint 环境）
+  const eslintBin = join(dir, "node_modules", ".bin", "eslint");
+  if (await fs.exists(eslintBin)) {
+    const result = spawnSync(eslintBin, ["."], { cwd: dir, encoding: "utf8" });
+    if (result.error) {
+      warnings.push(`eslint could not run: ${result.error.message}`);
+    } else if (result.status !== 0) {
+      const output = (result.stdout || "").trim() || (result.stderr || "").trim();
+      problems.push(`eslint (eslint-plugin-obsidianmd):\n${output}`);
+    }
+  } else {
+    warnings.push("eslint not available — run `pnpm install` in the plugin project first to enable eslint-plugin-obsidianmd checks");
+  }
 
   if (problems.length === 0) {
     const w = warnings.length ? `\nWarnings:\n- ${warnings.join("\n- ")}` : "";
@@ -580,8 +342,8 @@ export function apply(ctx: any, config: any) {
   }
 
   ctx.tools.register(defineTool({
-    name: "obsidian_scaffold",
-    description: "Generate a submission-ready Obsidian plugin skeleton (src/main.ts, src/settings.ts with declarative settings, manifest.json, esbuild/eslint configs, version-bump, versions.json, LICENSE, .gitignore). Validates id/name/description against Obsidian submission rules.",
+    name: "obsidian_plugin_scaffold",
+    description: "Generate a submission-ready Obsidian plugin skeleton from the official obsidian-sample-plugin template (src/main.ts, src/settings.ts, manifest.json, esbuild/eslint configs, versions.json, LICENSE, and more). Validates id/name/description against Obsidian submission rules.",
     parameters: {
       targetDir: { type: "string", required: true, description: "Directory (absolute or workspace-relative) to scaffold into." },
       id: { type: "string", required: true, description: "Plugin id: lowercase letters/digits/dashes/underscores, no 'obsidian', not ending with 'plugin'." },
@@ -600,8 +362,8 @@ export function apply(ctx: any, config: any) {
   }));
 
   ctx.tools.register(defineTool({
-    name: "obsidian_validate",
-    description: "Validate an Obsidian plugin: manifest required fields, submission naming rules (id/name/description), versions.json mapping, and package.json version consistency.",
+    name: "obsidian_plugin_validate",
+    description: "Validate an Obsidian plugin: manifest required fields, submission naming rules (id/name/description), versions.json mapping, package.json version consistency, and eslint-plugin-obsidianmd lint checks.",
     parameters: {
       projectDir: { type: "string", required: true, description: "Plugin project directory (absolute or workspace-relative)." },
     },
@@ -612,7 +374,7 @@ export function apply(ctx: any, config: any) {
   }));
 
   ctx.tools.register(defineTool({
-    name: "obsidian_version",
+    name: "obsidian_plugin_version",
     description: "Bump an Obsidian plugin version consistently across manifest.json, versions.json, and package.json.",
     parameters: {
       projectDir: { type: "string", required: true, description: "Plugin project directory (absolute or workspace-relative)." },

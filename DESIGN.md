@@ -55,6 +55,6 @@
 ## 验证（官方文档方式）
 
 1. `dsh --profile web --dump-config` —— 组合层出现 `# == @leelee/dsh-obsidian-plugin` 与 `id: obsidian-plugin`。
-2. `dsh web` 后，模型工具集多出 3 个 `obsidian_*` 工具；在会话里让模型调用 `obsidian_scaffold` / `obsidian_validate` / `obsidian_version` 验证行为。
+2. `dsh web` 后，模型工具集多出 3 个 `obsidian_*` 工具；在会话里让模型调用 `obsidian_plugin_scaffold` / `obsidian_plugin_validate` / `obsidian_plugin_version` 验证行为。
 
 参考：[打包与安装插件](https://deepseek-harness.github.io/deepseek-harness/develop/basic/publish.md) · [开发一个 Tool](https://deepseek-harness.github.io/deepseek-harness/develop/basic/tool.md)

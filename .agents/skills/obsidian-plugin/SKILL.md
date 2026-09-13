@@ -1,6 +1,6 @@
 ---
 name: obsidian-plugin
-description: Comprehensive guidelines for Obsidian plugin development including ESLint rules from eslint-plugin-obsidianmd v0.4.1, TypeScript best practices, memory management, API usage (requestUrl vs fetch), UI/UX standards, submission process, and Scorecard optimization. Use when working with Obsidian plugins, main.ts files, manifest.json, Plugin class, vault operations, or any Obsidian API development. Pair with the obsidian_scaffold, obsidian_validate, and obsidian_version tools for scaffolding, validating, and versioning.
+description: Comprehensive guidelines for Obsidian plugin development including ESLint rules from eslint-plugin-obsidianmd v0.4.1, TypeScript best practices, memory management, API usage (requestUrl vs fetch), UI/UX standards, submission process, and Scorecard optimization. Use when working with Obsidian plugins, main.ts files, manifest.json, Plugin class, vault operations, or any Obsidian API development. Pair with the obsidian_plugin_scaffold, obsidian_plugin_validate, and obsidian_plugin_version tools for scaffolding, validating, and versioning.
 license: MIT
 metadata: 
   version: 1.10.1
@@ -18,9 +18,9 @@ This skill pairs with three tools from the `@leelee/dsh-obsidian-plugin` bundle.
 
 | When / scenario | Tool | Key parameters |
 |---|---|---|
-| User asks to create a new Obsidian plugin | `obsidian_scaffold` | `targetDir`, `id`, `name`, `description`, `author` |
-| Validate an existing plugin / pre-submission self-check | `obsidian_validate` | `projectDir` |
-| Publish a new release / bump the version | `obsidian_version` | `projectDir`, `version`, `minAppVersion?` |
+| User asks to create a new Obsidian plugin | `obsidian_plugin_scaffold` | `targetDir`, `id`, `name`, `description`, `author` |
+| Validate an existing plugin / pre-submission self-check | `obsidian_plugin_validate` | `projectDir` |
+| Publish a new release / bump the version | `obsidian_plugin_version` | `projectDir`, `version`, `minAppVersion?` |
 
 ### Parameter sources
 
@@ -30,13 +30,13 @@ This skill pairs with three tools from the `@leelee/dsh-obsidian-plugin` bundle.
 
 ### Error loop
 
-Naming or version errors returned by `obsidian_scaffold` / `obsidian_validate` map to the "Submission & Naming" and "Plugin Submission Validation Workflow" rules below; fix per those rules and re-run until clean.
+Naming or version errors returned by `obsidian_plugin_scaffold` / `obsidian_plugin_validate` map to the "Submission & Naming" and "Plugin Submission Validation Workflow" rules below; fix per those rules and re-run until clean.
 
 ### Tool reference
 
-- `obsidian_scaffold` — Generate a submission-ready plugin skeleton (`src/main.ts` + `src/settings.ts` + `manifest.json` + esbuild/eslint configs + `versions.json` + `LICENSE`, 12 files). It validates id/name/description against the naming rules below before writing.
-- `obsidian_validate` — Validate an existing plugin: manifest required fields, naming/submission rules (id/name/description), `versions.json` mapping, and `package.json` version consistency.
-- `obsidian_version` — Bump the version consistently across `manifest.json`, `versions.json`, and `package.json`.
+- `obsidian_plugin_scaffold` — Generate a submission-ready plugin skeleton from the official obsidian-sample-plugin template (14 files). It validates id/name/description against the naming rules below before writing.
+- `obsidian_plugin_validate` — Validate an existing plugin: manifest required fields, naming/submission rules (id/name/description), `versions.json` mapping, `package.json` version consistency, and eslint-plugin-obsidianmd lint checks.
+- `obsidian_plugin_version` — Bump the version consistently across `manifest.json`, `versions.json`, and `package.json`.
 
 Prefer these tools over hand-editing files for scaffold, validation, and version bumps. The naming/submission rules below are the same rules the tools enforce.
 

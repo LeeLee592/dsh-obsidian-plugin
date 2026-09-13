@@ -8,9 +8,9 @@
 
 安装后，DSH 智能体新增 3 个工具，用于可靠地开发 Obsidian 插件：
 
-- `obsidian_scaffold` —— 生成合规插件骨架（`src/main.ts` + `src/settings.ts` 声明式设置 + esbuild/eslint + LICENSE 等 12 个文件），内置命名/提交规则校验。
-- `obsidian_validate` —— 校验 manifest 必填字段、命名与提交规则（id/name/description）、`versions.json` 映射与 `package.json` 版本一致性。
-- `obsidian_version` —— 同步 `manifest.json` / `versions.json` / `package.json` 三处版本。
+- `obsidian_plugin_scaffold` —— 基于官方 obsidian-sample-plugin 模板生成合规插件骨架（14 个文件），内置命名/提交规则校验。
+- `obsidian_plugin_validate` —— 校验 manifest 必填字段、命名与提交规则（id/name/description）、`versions.json` 映射与 `package.json` 版本一致性，并运行 eslint-plugin-obsidianmd 检查。
+- `obsidian_plugin_version` —— 同步 `manifest.json` / `versions.json` / `package.json` 三处版本。
 
 另配套 `obsidian-plugin` skill（知识库，内置于 `.agents/skills/obsidian-plugin`，源自 [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill)）：Obsidian API、命名/提交规则、无障碍、社区提交与 Scorecard 指南。
 
@@ -38,7 +38,7 @@ dsh web
 
 ## 使用
 
-对 DSH 说「帮我新建一个 Obsidian 插件…」，agent 会加载 `obsidian-plugin` skill 获取规范，并用 `obsidian_scaffold` / `obsidian_validate` / `obsidian_version` 完成脚手架、校验与版本管理。
+对 DSH 说「帮我新建一个 Obsidian 插件…」，agent 会加载 `obsidian-plugin` skill 获取规范，并用 `obsidian_plugin_scaffold` / `obsidian_plugin_validate` / `obsidian_plugin_version` 完成脚手架、校验与版本管理。
 
 配置项 `defaultMinAppVersion`（默认 `1.13.0`）可在 profile 的 `cordis.patch.yml` 按 id 覆盖：
 
@@ -76,10 +76,10 @@ dsh web
 deploy: OK — 'obsidian-plugin' registered in profile 'web'
 ```
 
-`obsidian_scaffold`：
+`obsidian_plugin_scaffold`：
 
 ```text
-Scaffolded my-plugin into /path/to/my-plugin (12 files). Next: cd my-plugin && pnpm install && pnpm run dev
+Scaffolded my-plugin into /path/to/my-plugin (14 files). Next: cd my-plugin && pnpm install && pnpm run dev
 ```
 
 ## 文档

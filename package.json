@@ -14,7 +14,7 @@
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
-  "files": ["lib", "doc", "cordis.patch.yml", ".agents/skills"],
+  "files": ["lib", "doc", "cordis.patch.yml", ".agents/skills", "assets/templates"],
   "license": "MIT",
   "keywords": ["dsh", "dsh-plugin", "deepseek-harness", "obsidian"],
   "dsh": {

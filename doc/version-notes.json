@@ -25,17 +25,17 @@
     "zh": {
       "title": "初始版本",
       "items": [
-        "obsidian_scaffold：生成合规插件骨架，内置命名/提交规则校验。",
-        "obsidian_validate：校验 manifest 与版本一致性。",
-        "obsidian_version：同步 manifest.json / versions.json / package.json 三处版本。"
+        "obsidian_plugin_scaffold：生成合规插件骨架，内置命名/提交规则校验。",
+        "obsidian_plugin_validate：校验 manifest 与版本一致性。",
+        "obsidian_plugin_version：同步 manifest.json / versions.json / package.json 三处版本。"
       ]
     },
     "en": {
       "title": "Initial release",
       "items": [
-        "obsidian_scaffold: generate a compliant plugin skeleton with built-in naming/submission checks.",
-        "obsidian_validate: validate the manifest and version consistency.",
-        "obsidian_version: bump the three version fields together."
+        "obsidian_plugin_scaffold: generate a compliant plugin skeleton with built-in naming/submission checks.",
+        "obsidian_plugin_validate: validate the manifest and version consistency.",
+        "obsidian_plugin_version: bump the three version fields together."
       ]
     }
   }
