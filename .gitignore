@@ -4,3 +4,7 @@ lib/
 .pnpm-store/
 *.log
 .DS_Store
+
+# Local Obsidian test vault: runtime state and deployed plugin artifacts,
+# never part of the published package.
+TestVault/
