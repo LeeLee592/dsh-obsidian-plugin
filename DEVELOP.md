@@ -1,6 +1,6 @@
 # Development Guide
 
-**English** | [中文](./DEVELOP.zh.md)
+**🌐 English** | [🇨🇳 中文](./DEVELOP.zh.md)
 
 ## Goal
 

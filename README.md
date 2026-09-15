@@ -1,6 +1,6 @@
 # dsh-obsidian-plugin
 
-**English** | [中文](./README.zh.md)
+**🌐 English** | [🇨🇳 中文](./README.zh.md)
 
 [![Listed on dsh-plugin.org](https://dsh-plugin.org/badges/listed.svg)](https://dsh-plugin.org/plugins/leelee592/dsh-obsidian-plugin)
 [![dshfind](https://dshfind.com/api/badge/LeeLee592/dsh-obsidian-plugin?lang=en)](https://dshfind.com/plugins/LeeLee592/dsh-obsidian-plugin?ref=badge)

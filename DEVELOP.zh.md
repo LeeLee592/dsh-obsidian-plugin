@@ -1,6 +1,6 @@
 # 开发文档
 
-[English](./DEVELOP.md) | **中文**
+[🌐 English](./DEVELOP.md) | **🇨🇳 中文**
 
 ## 目标
 
