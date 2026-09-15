@@ -1,30 +1,30 @@
 # AGENTS.md
 
-本文件面向在该仓库工作的 AI 编码代理（agent）。项目详情以各文档为准，这里只列必须遵守的约定。
+This file is for AI coding agents working in this repository. Project details live in the referenced docs; this file only lists mandatory conventions.
 
-## 文档索引
+## Doc index
 
-- 核心能力、主要功能、安装与使用：见 [README.md](README.md)（中文）/ [README.en.md](README.en.md)（英文）。
-- 架构设计、目录结构、开发测试命令：见 [DEVELOP.md](DEVELOP.md)（中文）/ [DEVELOP.en.md](DEVELOP.en.md)（英文）。
+- Core capabilities, features, install, and usage: see [README.md](README.md) (English, default) / [README.zh.md](README.zh.md) (中文).
+- Architecture, directory structure, dev/test commands: see [DEVELOP.md](DEVELOP.md) (English, default) / [DEVELOP.zh.md](DEVELOP.zh.md) (中文).
 
-## 约定（必须遵守）
+## Conventions (mandatory)
 
-### 文档同步（架构变更时）
+### Doc sync (on architecture changes)
 
-每次架构 / 接口 / 命名变更（新增、删除、重命名工具；skill 结构或决策表调整；模板 / 目录 / 依赖变化等），必须**按需检查并同步**以下文件中的相关描述，中英文同步：
+On any architecture / interface / naming change (adding, removing, or renaming tools; skill structure or decision-table changes; template / directory / dependency changes), **check and sync** the relevant descriptions in the following files, keeping both languages in sync:
 
-- [README.md](README.md) / [README.en.md](README.en.md)
-- [DEVELOP.md](DEVELOP.md) / [DEVELOP.en.md](DEVELOP.en.md)
+- [README.md](README.md) / [README.zh.md](README.zh.md)
+- [DEVELOP.md](DEVELOP.md) / [DEVELOP.zh.md](DEVELOP.zh.md)
 - [doc/harness.default.md](doc/harness.default.md)
 - [doc/manual.zh.txt](doc/manual.zh.txt) / [doc/manual.en.txt](doc/manual.en.txt)
 - [doc/version-notes.json](doc/version-notes.json)
 - [assets/skills/obsidian-plugin/SKILL.md](assets/skills/obsidian-plugin/SKILL.md)
 
-### 可沉淀规则
+### Reusable rules
 
-工具实现过程中踩坑 / 总结的经验，必须**加以提炼变为通用规则**（而非具体实现细节），再沉淀到 [DEVELOP.md](DEVELOP.md) 的「## 工具实现要点」中，并同步到 [DEVELOP.en.md](DEVELOP.en.md)。
+Lessons learned while implementing tools must be **generalized into reusable rules** (not concrete implementation details), then distilled into the "## Tool Implementation Notes" section of [DEVELOP.md](DEVELOP.md) and synced to [DEVELOP.zh.md](DEVELOP.zh.md).
 
-### 代码开发
+### Code development
 
-- 遵循 [DEVELOP.md](DEVELOP.md) 的「## 工具实现要点」中的通用规则。
-- 遵循 DeepSeek Harness 插件的 Cordis 开发规范：插件导出 `name` / `inject` / `apply(ctx, config)`；用 `ctx.tools.register(defineTool({...}))` 注册工具；服务用 `ctx.get(...)` 获取（不属性访问）；文件读写走 `ctx.fs`（受沙箱约束）。
+- Follow the reusable rules in "## Tool Implementation Notes" of [DEVELOP.md](DEVELOP.md).
+- Follow DeepSeek Harness plugin Cordis conventions: export `name` / `inject` / `apply(ctx, config)`; register tools with `ctx.tools.register(defineTool({...}))`; get services via `ctx.get(...)` (no property access); read/write files via `ctx.fs` (sandboxed).
