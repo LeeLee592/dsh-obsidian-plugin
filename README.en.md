@@ -3,6 +3,7 @@
 [🌐 **English**](./README.en.md) | [🇨🇳 中文](./README.md)
 
 [![Listed on dsh-plugin.org](https://dsh-plugin.org/badges/listed.svg)](https://dsh-plugin.org/plugins/leelee592/dsh-obsidian-plugin)
+[![dshfind](https://dshfind.com/api/badge/LeeLee592/dsh-obsidian-plugin?lang=en)](https://dshfind.com/plugins/LeeLee592/dsh-obsidian-plugin?ref=badge)
 
 Provides DeepSeek Harness (DSH) agents with Obsidian plugin development capabilities: scaffolding, validation, version syncing, plus a development-guidelines skill.
 

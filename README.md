@@ -3,6 +3,7 @@
 🇨🇳 **中文** | [🌐 English](./README.en.md)
 
 [![Listed on dsh-plugin.org](https://dsh-plugin.org/badges/listed.svg)](https://dsh-plugin.org/plugins/leelee592/dsh-obsidian-plugin)
+[![dshfind](https://dshfind.com/api/badge/LeeLee592/dsh-obsidian-plugin?lang=zh)](https://dshfind.com/zh/plugins/LeeLee592/dsh-obsidian-plugin?ref=badge)
 
 给 DeepSeek Harness（DSH）智能体提供 Obsidian 插件开发能力：脚手架、校验、版本同步，并配套开发规范 skill。
 
