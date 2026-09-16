@@ -43,6 +43,15 @@ Why this is mandatory:
 
 Related: add the `doc/version-notes.json` entry for the version in the same commit, and keep the other synced docs current (see "Doc sync" above).
 
+**Verify the release actually landed.** A green Release workflow means "uploaded", not "live": publication is asynchronous and the registry can lag the workflow by minutes. Confirm by reading the registry, and keep polling before concluding anything:
+
+```bash
+curl -s "https://registry.npmjs.org/@leelee592%2Fdsh-obsidian-plugin" | python3 -c \
+  'import sys,json; print(list(json.load(sys.stdin)["versions"]))'   # must list the new version
+```
+
+A single early read is not evidence of failure, and a local `pnpm publish` failing for lack of credentials says nothing about CI. Only conclude "the release failed" after the version is still absent well past the workflow's completion, and verify the artifact itself (`npm pack` → check `lib/`, `doc/`, `assets/`) before calling the release done.
+
 ### Reusable rules
 
 Lessons learned while implementing tools must be **generalized into reusable rules** (not concrete implementation details), then distilled into the "## Tool Implementation Notes" section of [DEVELOP.md](DEVELOP.md) and synced to [DEVELOP.zh.md](DEVELOP.zh.md).
