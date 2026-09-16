@@ -339,12 +339,15 @@ vault-open（内部 IPC，已实测）
 
 ### 4.5 `obsidian_plugin_reload`
 
-循环里调用最频繁的状态变更工具：`reload`（`plugin:reload`）/ `enable` / `disable`（`plugin:enable|disable`）。
+循环里调用最频繁的状态变更工具。actions：`reload` / `enable` / `disable` / `rescan` / `unrestrict`。
 
-- 前置：**目标库必须是当前活动窗口**（`plugin:*` 按活动窗口解析）→ 由 `deploy` 或 `vault ensure` 保证；工具自身也应在执行前自检活动库并在不符时先 `vault-open`；
+- 前置：**目标库必须是当前活动窗口**（`plugin:*` 按活动窗口解析）→ 由 `vault ensure` 保证；工具自身在活动库不符时给出指向 `ensure` 的诊断（实测有效）；
 - **重试策略**：单次超时（默认 20s）后重试 1 次；
-- **已知冲突**：若检测到调试器已附加（刚读过 console），**先拒绝执行并提示**——实测附加状态下 `plugin:reload` 会挂死；
-- 返回里区分「已重载」与「重载后校验通过」。
+- **调试器冲突**：附加状态下（刚读过 console）`plugin:reload` 会挂死，工具据此判定并提示先 detach；
+- **`rescan`（P1 实测新增，必需）**：**Obsidian 只在库加载时扫描一次插件目录**，所以刚部署的插件对 `plugin:*` 完全是不可见的——实测报 `Plugin "x" not found`，而 `app.plugins.loadManifests()` 能在运行时重扫（实测重扫后 `manifests` 从 0 变 1）。因此 `reload` 默认先 rescan，另提供显式 `rescan` action；
+- **`unrestrict`**：库处于受限模式时，即便 rescan 成功、清单里有该插件，CLI 仍会报 `Plugin "x" is not enabled` 且**永远不会加载**。此 action 调用 `app.plugins.setEnable(true)`——它是**逐库的安全设置**，会重载窗口，因此必须是显式动作（绝不作为副作用），并在返回里说明影响范围仅该库；
+- **启用顺序**：`deploy` 写入 enable 清单 ≠ App 已启用；实测需要 `plugin:enable`（或下次库加载）后才真正加载；
+- 返回里区分「命令被接受」与「**加载后校验通过**」：用 `app.plugins.plugins` 判定 loaded，并附 `dev:errors` 的结论。
 
 ### 4.6 `obsidian_plugin_inspect`（只读观测，免审）
 
@@ -527,7 +530,7 @@ P1+ 预留（尚未创建）：`preflight.ts`（CLI/App/vault/受限模式/信�
 | 阶段 | 内容 | 交付价值 | 依赖 | 状态 |
 |---|---|---|---|---|
 | **P0** | `build` + `deploy`（离线路径）+ `dsh.obsidian.json` 绑定 | 「装得进去」，无 CLI 也能用 | 无 | ✅ **已实现**（14 项测试 + 真实第三方插件 float-mark 端到端验证） |
-| **P1** | preflight + `vault` + `reload` + `inspect`（含信任协议） | 「跑得起来、看得见」 | Obsidian + CLI | 待做 |
+| **P1** | `vault` + `reload` + `inspect`（含受限模式/信任处置） | 「跑得起来、看得见」 | Obsidian + CLI | ✅ **已实现**（29 项测试 + float-mark 真机全链路验收） |
 | **P2** | `test` + `assets/harness` | 无 App 环境的冒烟回归 | Node | 待做 |
 | **P3** | `eval` + 审批策略 + skill/文档同步 + `src/` 分层重构 | 完整闭环与可维护性 | P0–P2 | 部分完成（`src/` 已分层；skill/文档随 P0 同步） |
 
@@ -564,6 +567,8 @@ P1+ 预留（尚未创建）：`preflight.ts`（CLI/App/vault/受限模式/信�
 11. **降级要写进返回值**：每级降级（无 CLI / 无 esbuild / 无前台窗口 / 信任未决 / 沙箱越界）都显式出现在结果里。
 12. **未文档化的内部通道要留退路**：`vault-open` 一类内部 IPC 必须配一条人工兜底路径，并允许整链降级。
 13. **沙箱只约束自己**：`ctx.fs` 受 policy 约束，spawn 的子进程不受约束——文档必须写明。
+14. **状态会被外部缓存，写盘不等于对方看见**：Obsidian 只在库加载时扫描插件目录，部署后的文件对运行时命令完全不可见（实测 `Plugin "x" not found`）。工具必须在「写盘」与「对方可见」之间插入一次显式的重新索引（此处为 `app.plugins.loadManifests()`），并把这一步作为前置条件而不是让调用者去猜。
+15. **一次只暴露一层安全开关**：受限模式这类逐库安全设置，必须做成显式动作（写明影响范围与「会重载窗口」的后果），绝不能作为其它操作顺带的副作用。
 
 ---
 

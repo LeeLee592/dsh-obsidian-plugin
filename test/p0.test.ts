@@ -267,8 +267,11 @@ test("the plugin registers every tool through the real defineTool validator", as
   assert.deepEqual(names, [
     "obsidian_plugin_build",
     "obsidian_plugin_deploy",
+    "obsidian_plugin_inspect",
+    "obsidian_plugin_reload",
     "obsidian_plugin_scaffold",
     "obsidian_plugin_validate",
+    "obsidian_plugin_vault",
     "obsidian_plugin_version",
   ]);
   assert.equal(mod.name, "obsidian-plugin");

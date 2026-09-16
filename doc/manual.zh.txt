@@ -2,17 +2,20 @@
 ==========================================
 
 【这是什么插件】
-给 DeepSeek Harness 智能体提供 Obsidian 插件开发能力，包含一个知识 skill 与五个工具：
+给 DeepSeek Harness 智能体提供 Obsidian 插件开发能力，包含一个知识 skill 与八个工具：
 
 - obsidian-plugin skill（知识库）：提供 Obsidian 插件开发规范（命名/提交规则、无障碍、代码质量、提交与 Scorecard），指导 agent 的开发流程。
 - obsidian_plugin_scaffold：基于官方 obsidian-sample-plugin 模板生成合规插件骨架（14 个文件），内置命名/提交规则校验。
 - obsidian_plugin_build：把插件项目打包成可加载的 main.js（CommonJS，obsidian 外部化）并做静态自检；三级降级（项目本地 esbuild → 项目自身的 production build 脚本 → 给出可操作的报错），不启动 watch 进程，并报告实际使用的层级。
 - obsidian_plugin_deploy：把构建产物安装进 vault 的 .obsidian/plugins/<id>/，并把插件 id 合并进该库的 community-plugins.json（保留既有条目），随后把该 vault 记入项目旁的 dsh.obsidian.json；分列报告 written / enabled / active 三态（active 在后续阶段前恒为 unknown）。
+- obsidian_plugin_inspect：只读观测运行中的 Obsidian，绝不改动 App：status 一次给出体检事实（App 版本、已注册的库、实际应答的库、该库的受限模式状态、目标插件是否已安装/启用/版本匹配、信任弹窗是否待确认），另有 errors / console / dom / css / screenshot / trustCheck。
+- obsidian_plugin_vault：管理真机验证用的库：status 报告已注册的库、当前活动窗口与激活将要做什么；ensure 是两步确认——不带 confirm 只描述后果，带 confirm=true 才登记/打开该库（Obsidian 会切到前台），随后由 App 自证哪个库是活动库，并如实上报信任弹窗而不代为确认；close 关测试窗口（macOS）；prune 尚未实现。
+- obsidian_plugin_reload：让代码改动在运行中的 App 生效：reload（默认）/ enable / disable；rescan 重扫插件清单索引（Obsidian 只在库加载时扫描一次插件目录，刚部署的插件在重扫前对所有插件命令都不可见）；unrestrict 显式关闭该库的受限模式（会重载窗口）；重载后校验插件是否真的注册进 App，并回报插件打印的内容。
 - obsidian_plugin_validate：校验 manifest 必填字段、命名规则、versions.json 映射与 package.json 版本一致性，并运行 eslint-plugin-obsidianmd 检查。
 - obsidian_plugin_version：同步 manifest.json / versions.json / package.json 三处版本。
 
 【使用】
-对 DSH 说「帮我新建一个 Obsidian 插件…」，agent 会加载 obsidian-plugin skill，按照 Obsidian Plugin Development Guidelines 的指导进行开发，并在过程中调用工具完成脚手架、构建、部署、校验与版本管理。
+对 DSH 说「帮我新建一个 Obsidian 插件…」，agent 会加载 obsidian-plugin skill，按照 Obsidian Plugin Development Guidelines 的指导进行开发，并在过程中调用工具完成脚手架、构建、部署、真机观察与验证、校验与版本管理。
 
 【命名规则】（工具内置校验，也用于自行检查）
 - id：小写字母/数字/连字符/下划线，不含 "obsidian"，不以 "plugin" 结尾。

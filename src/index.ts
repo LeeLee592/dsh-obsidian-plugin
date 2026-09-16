@@ -6,6 +6,9 @@ import { readBundleDoc } from "./bundle-doc.js";
 import { Fs, readAsset, type FsCall } from "./fs.js";
 import { buildPlugin } from "./build.js";
 import { deployPlugin } from "./deploy.js";
+import { inspect } from "./inspect.js";
+import { vaultAction } from "./vault.js";
+import { reloadPlugin } from "./reload.js";
 import {
   isSemver,
   namingProblems,
@@ -38,6 +41,10 @@ export {
   type DeployArgs,
   type VaultReport,
 } from "./deploy.js";
+export { classify, runCli, explainCliFailure, type CliResult, type CliStatus } from "./cli.js";
+export { inspect, truncate, type InspectAction, type InspectArgs } from "./inspect.js";
+export { vaultAction, registryPath, readRegistry, type VaultAction, type VaultArgs } from "./vault.js";
+export { reloadPlugin, type ReloadAction, type ReloadArgs } from "./reload.js";
 
 // ---- version notes / HARNESS context (external doc/ shipped with the package) ----
 
@@ -337,6 +344,67 @@ export function apply(ctx: any, config: any) {
     output: textOutput,
     async execute(args: any, exec: any) {
       return deployPlugin(fs, args, makeCall(exec));
+    },
+  }));
+
+  ctx.tools.register(defineTool({
+    name: "obsidian_plugin_inspect",
+    description: "Read-only observation of the running Obsidian app: status (one-shot health report: live app version, registered vaults, active vault, restricted mode, whether the target plugin is installed/enabled, version drift, pending trust modal), errors, console (attaches and detaches the capture debugger), dom, css, screenshot, trustCheck. It never changes the app. Window-scoped readings follow the active window, so status reports which vault actually answered and warns on a mismatch.",
+    parameters: {
+      action: { type: "string", required: true, description: "status | errors | console | dom | css | screenshot | trustCheck" },
+      projectDir: { type: "string", description: "Plugin project directory; status uses its manifest.json to check the installed/enabled/version state." },
+      vault: { type: "string", description: "Target vault name or path used to address the CLI (window-scoped commands still follow the active window)." },
+      selector: { type: "string", description: "dom/css: CSS selector." },
+      what: { type: "string", description: "dom: text | attr | total | all | inner (default text)." },
+      attr: { type: "string", description: "dom: attribute name when what=attr." },
+      prop: { type: "string", description: "css: property to read." },
+      level: { type: "string", description: "console: log | warn | error | info | debug." },
+      limit: { type: "number", description: "console: max messages (default 50)." },
+      path: { type: "string", description: "screenshot: absolute output path inside the workspace." },
+      clear: { type: "boolean", description: "errors/console: clear the buffer after reading." },
+      keepDebugger: { type: "boolean", description: "console: leave the capture debugger attached (read it later, but plugin:reload will hang until it is detached)." },
+    },
+    output: textOutput,
+    async execute(args: any, exec: any) {
+      return inspect(fs, args, makeCall(exec));
+    },
+  }));
+
+  ctx.tools.register(defineTool({
+    name: "obsidian_plugin_vault",
+    description: "Manage the vault used for live verification. status reports registered vaults, the active window and what activation would take. ensure WITHOUT confirm only describes the consequences; with confirm=true it registers/opens the vault (Obsidian switches to the front) and then verifies, reporting Obsidian's trust modal instead of accepting it. close closes the test window (macOS). Use it before any window-scoped command so the readings hit the right vault.",
+    parameters: {
+      action: { type: "string", required: true, description: "status | ensure | close | prune" },
+      vault: { type: "string", description: "Target vault: absolute path, or a vault name registered with Obsidian." },
+      confirm: { type: "boolean", description: "Required for ensure to actually open/register the vault, and for any destructive action." },
+    },
+    output: textOutput,
+    async execute(args: any, exec: any) {
+      return vaultAction(fs, args, makeCall(exec));
+    },
+  }));
+
+  ctx.tools.register(defineTool({
+    name: "obsidian_plugin_reload",
+    description: "Make a code change take effect in the running Obsidian app: reload (plugin:reload), enable, or disable a plugin. After reloading it verifies that the plugin is actually registered in the app and reports anything the plugin logged — a command that was accepted is not the same as a plugin that loaded. Requires the target vault to be the active window (use obsidian_plugin_vault action=ensure first).",
+    parameters: {
+      projectDir: { type: "string", description: "Plugin project directory; the plugin id is read from its manifest.json." },
+      pluginId: { type: "string", description: "Plugin id; overrides projectDir lookup." },
+      vault: { type: "string", description: "Target vault name used to address the CLI." },
+      action: { type: "string", description: "reload (default) | enable | disable | rescan | unrestrict. rescan refreshes the plugin index (Obsidian only scans at vault load, so a freshly deployed plugin is invisible without it); unrestrict turns OFF restricted mode for this vault (a security setting, reloads the window)." },
+      verify: { type: "boolean", description: "Confirm the plugin is registered afterwards (default true)." },
+    },
+    output: textOutput,
+    async execute(args: any, exec: any) {
+      const call = makeCall(exec);
+      return reloadPlugin(args, {
+        cli: { signal: call.signal },
+        readManifestId: async (projectDir: string) => {
+          const dir = await fs.resolve(projectDir, call.workspaceRoot);
+          const manifest = await fs.readJson(join(dir, "manifest.json"));
+          return typeof manifest?.id === "string" ? manifest.id : undefined;
+        },
+      });
     },
   }));
 

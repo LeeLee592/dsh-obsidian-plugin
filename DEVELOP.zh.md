@@ -4,17 +4,20 @@
 
 ## 目标
 
-让 DeepSeek Harness（DSH）的智能体可靠地完成 Obsidian 插件的脚手架、构建、部署、校验与版本同步，并配套提供开发规范知识（skill）。
+让 DeepSeek Harness（DSH）的智能体可靠地完成 Obsidian 插件的脚手架、构建、部署、真机验证、校验与版本同步，并配套提供开发规范知识（skill）。
 
 ## 架构
 
 两个互补、职责单一的部分：
 
 1. **知识（skill）**——Obsidian 插件开发规范（命名/提交规则、无障碍、代码质量、提交与 Scorecard）。源自 [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill)，内置为 [assets/skills/obsidian-plugin](assets/skills/obsidian-plugin/SKILL.md)，并在 `apply()` 里通过 `ctx.skills.register` 注册为 runtime skill（不依赖 project root）。
-2. **护栏（tool bundle）**——本仓库 `@leelee592/dsh-obsidian-plugin`，用 typed schema 暴露 5 个工具，把确定性操作封装起来：
+2. **护栏（tool bundle）**——本仓库 `@leelee592/dsh-obsidian-plugin`，用 typed schema 暴露 8 个工具，把确定性操作封装起来：
    - `obsidian_plugin_scaffold` —— 复用 obsidian-sample-plugin 模板生成骨架
    - `obsidian_plugin_build` —— 把 src/main.ts 打包成可加载的 main.js + 静态自检
    - `obsidian_plugin_deploy` —— 把构建产物装进 vault 并启用插件 id
+   - `obsidian_plugin_inspect` —— 只读观测运行中的 App（status / errors / console / dom / css / screenshot / trustCheck）
+   - `obsidian_plugin_vault` —— 管理真机验证用的库（status / ensure / close / prune）
+   - `obsidian_plugin_reload` —— 让改动在运行中的 App 生效，并校验插件确实加载
    - `obsidian_plugin_validate` —— 结构校验 + eslint-plugin-obsidianmd 检查
    - `obsidian_plugin_version` —— 三处版本同步
 
@@ -25,7 +28,7 @@
         │ 工具(bundle)             │ skill 发现
 ┌───────┴──────────────────────┐  ┌────────┴───────────────────┐
 │ @leelee592/dsh-obsidian-plugin │  │ obsidian-plugin skill（内置）  │
-│  5 tools, scaffold…version  │  │  SKILL.md + reference/*     │
+│  8 tools, scaffold…version  │  │  SKILL.md + reference/*     │
 └─────────────────────────────┘  └─────────────────────────────┘
 ```
 
@@ -44,9 +47,14 @@
 │   ├── naming.ts         # 提交命名规则、占位符渲染、semver
 │   ├── build.ts          # obsidian_plugin_build：三级降级 + 静态自检
 │   ├── deploy.ts         # obsidian_plugin_deploy：vault 解析、产物安装、绑定写入
+│   ├── inspect.ts        # obsidian_plugin_inspect：只读观测 status/errors/console/dom/css
+│   ├── vault.ts          # obsidian_plugin_vault：库注册表、激活阶梯、confirm 闸门
+│   ├── reload.ts         # obsidian_plugin_reload：reload/enable/rescan/unrestrict + 加载校验
+│   ├── cli.ts            # obsidian CLI 调用：超时 + 按输出分类失败
 │   └── bundle-doc.ts     # 读取包内 doc/ 资源
 ├── test/
-│   └── p0.test.ts        # node:test 跑在 lib/ 上（裸 Node，无需 harness）
+│   ├── p0.test.ts        # node:test 跑在 lib/ 上（裸 Node，无需 harness）
+│   └── p1.test.ts        # node:test 跑在 lib/ 上：CLI 分类、eval 解析、argv、截断
 ├── scripts/
 │   ├── link-dsh-deps.mjs # 链接 $DSH_HOME 的 @deepseek-ai 类型
 │   └── deploy.sh         # build + 注册工具 + dump-config 验证
@@ -90,3 +98,8 @@ pnpm run deploy         # build + 注册进 profile + dump-config 验证
 - **目标解析要有确定顺序，失败要给选项**：显式参数 → 已记住的绑定 → 约定的目录 → 拒绝并列出候选做法。不要创建用户没有要求的目标，也不要在多个候选之间猜。
 - **工具 `parameters` 是属性映射表**：`{ name: { type, required?, description } }`，不是 JSON Schema 根。JSON Schema 根会在加载时于工具 API 内抛错，直接让整个插件起不来——用「通过真实校验器注册全部工具」的测试把它锁住。
 - **上报残留文件**：安装完成后列出目标目录里意料之外的文件。上一版布局留下的陈旧产物是只在运行期才暴露的失败模式。
+- **读取必须自证目标**：只要命令的目标依赖外部状态（哪个窗口在前台、选中了哪个项目），就在**同一次读取**里返回身份标识——这里是数据和 `app.vault.getName()` 一起返回。用另一次探测去推断目标，正是「读数悄悄来自错误位置」的成因。
+- **退出码永远不能覆盖输出**：打印 `Error: …` 却仍以 `0` 退出的 CLI 会击穿所有基于状态的判定。按输出分类，并把「成功但没有任何输出」单独归为一类，因为静默超时不是成功。
+- **状态存在于你的进程之外**：另一个应用会缓存它读到的东西，写文件不会让对方看见。在「已写入」和「对可见」之间插入一次显式重新索引，而不是留给调用者去发现。
+- **一次只暴露一层安全开关**：作用于某个作用域的安全设置（这里是逐库受限模式）绝不能成为其它操作顺带的副作用。给它独立动作，并写明后果与影响范围。
+- **依赖前台状态的步骤要一次做完**：如果某操作依赖外部焦点，就把需要它的步骤连续执行。用户在两次工具调用之间切一下应用，就可能让前一次的铺垫失效。

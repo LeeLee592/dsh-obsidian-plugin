@@ -1,5 +1,29 @@
 [
   {
+    "version": "0.5.0",
+    "date": "2026-09-16",
+    "zh": {
+      "title": "打通真机验证：观测、库管理与重载",
+      "items": [
+        "新增 obsidian_plugin_inspect（只读观测）：status 一次给出体检事实（App 版本、已注册的库、实际应答的库、该库的受限模式状态、目标插件是否已安装/启用/版本匹配、信任弹窗是否待确认），另有 errors / console / dom / css / screenshot / trustCheck；绝不改动 App。",
+        "新增 obsidian_plugin_vault（真机验证的库管理）：status 报告已注册的库、当前活动窗口与激活将要做什么；ensure 是两步确认——不带 confirm 只描述后果，带 confirm=true 才登记/打开该库（Obsidian 会切到前台），随后由 App 自证哪个库是活动库，并如实上报信任弹窗而不代为确认。",
+        "新增 obsidian_plugin_reload（让改动生效）：reload（默认）/ enable / disable；rescan 重扫插件清单索引——Obsidian 只在库加载时扫描一次插件目录，刚部署的插件在重扫前对所有插件命令都不可见。",
+        "status 会说明究竟是哪个库在实际应答（窗口级命令跟随活动窗口，vault 参数并不可靠），并报告该库的受限模式状态；读数与目标库不符时，先 ensure 再观测。",
+        "reload 重载后校验插件是否真的注册进 App 并回报插件日志——「命令被接受」不等于「插件已加载」；受限模式是逐库的安全设置，只能由显式的 reload action=unrestrict 关闭（会重载窗口），绝不作为副作用。"
+      ]
+    },
+    "en": {
+      "title": "Live verification: observe, manage the vault, reload",
+      "items": [
+        "New obsidian_plugin_inspect (read-only observation): status returns the health facts in one shot (app version, registered vaults, which vault actually answered, that vault's restricted-mode state, whether the target plugin is installed/enabled/version-matched, whether the trust modal is pending), plus errors / console / dom / css / screenshot / trustCheck; it never changes the app.",
+        "New obsidian_plugin_vault (vault management for live verification): status reports registered vaults, the active window and what activation would take; ensure is a two-step confirmation — without confirm it only describes the consequences, with confirm=true it registers/opens the vault (Obsidian switches to the front) and then asks the app which vault is active, reporting Obsidian's trust modal instead of accepting it.",
+        "New obsidian_plugin_reload (make a change take effect): reload (default) / enable / disable; rescan refreshes the plugin manifest index — Obsidian scans a vault's plugin directory only at vault load, so a freshly deployed plugin stays invisible to every plugin command until then.",
+        "status states which vault actually answered (window-scoped commands follow the active window; vault= does not reliably redirect them) and reports that vault's restricted-mode state; when a reading does not match the target vault, run ensure first and observe again.",
+        "After reloading, the plugin's registration in the app is verified and anything the plugin logged is reported — an accepted command is not a loaded plugin; restricted mode is a per-vault security setting that only an explicit reload action=unrestrict turns off (it reloads the window), and it is never a side effect."
+      ]
+    }
+  },
+  {
     "version": "0.4.0",
     "date": "2026-09-16",
     "zh": {

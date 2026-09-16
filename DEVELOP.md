@@ -4,17 +4,20 @@
 
 ## Goal
 
-Let DeepSeek Harness (DSH) agents reliably scaffold, build, deploy, validate, and version-sync Obsidian plugins, with accompanying development-guideline knowledge (skill).
+Let DeepSeek Harness (DSH) agents reliably scaffold, build, deploy, live-verify, validate, and version-sync Obsidian plugins, with accompanying development-guideline knowledge (skill).
 
 ## Architecture
 
 Two complementary, single-purpose parts:
 
 1. **Knowledge (skill)** — Obsidian plugin development guidelines (naming/submission rules, accessibility, code quality, submission & Scorecard). Derived from [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill), vendored into [assets/skills/obsidian-plugin](assets/skills/obsidian-plugin/SKILL.md) and registered as a runtime skill via `ctx.skills.register` in `apply()` (independent of project root).
-2. **Guardrails (tool bundle)** — this repo `@leelee592/dsh-obsidian-plugin` exposes 5 tools with typed schemas:
+2. **Guardrails (tool bundle)** — this repo `@leelee592/dsh-obsidian-plugin` exposes 8 tools with typed schemas:
    - `obsidian_plugin_scaffold` — generate a skeleton from the obsidian-sample-plugin template
    - `obsidian_plugin_build` — bundle src/main.ts into a loadable main.js + static self-checks
    - `obsidian_plugin_deploy` — install the built artifacts into a vault and enable the plugin id
+   - `obsidian_plugin_inspect` — read-only observation of the running app (status / errors / console / dom / css / screenshot / trustCheck)
+   - `obsidian_plugin_vault` — manage the vault used for live verification (status / ensure / close / prune)
+   - `obsidian_plugin_reload` — make a change take effect and verify the plugin actually loaded
    - `obsidian_plugin_validate` — structural validation + eslint-plugin-obsidianmd checks
    - `obsidian_plugin_version` — sync versions across three files
 
@@ -25,7 +28,7 @@ Two complementary, single-purpose parts:
         │ tool bundle             │ skill discovery
 ┌───────┴──────────────────────┐  ┌────────┴───────────────────┐
 │ @leelee592/dsh-obsidian-plugin │  │ obsidian-plugin skill       │
-│  5 tools, scaffold…version  │  │  SKILL.md + reference/*     │
+│  8 tools, scaffold…version  │  │  SKILL.md + reference/*     │
 └─────────────────────────────┘  └─────────────────────────────┘
 ```
 
@@ -44,9 +47,14 @@ Two complementary, single-purpose parts:
 │   ├── naming.ts         # submission naming rules, placeholder rendering, semver
 │   ├── build.ts          # obsidian_plugin_build: three-tier degradation + static checks
 │   ├── deploy.ts         # obsidian_plugin_deploy: vault resolution, artifacts, binding
+│   ├── inspect.ts        # obsidian_plugin_inspect: read-only status/errors/console/dom/css
+│   ├── vault.ts          # obsidian_plugin_vault: registry, activation ladder, confirm gate
+│   ├── reload.ts         # obsidian_plugin_reload: reload/enable/rescan/unrestrict + verify
+│   ├── cli.ts            # obsidian CLI runner: timeout + output-based failure classification
 │   └── bundle-doc.ts     # read bundled doc/ resources
 ├── test/
-│   └── p0.test.ts        # node:test over lib/ (bare Node, no harness needed)
+│   ├── p0.test.ts        # node:test over lib/ (bare Node, no harness needed)
+│   └── p1.test.ts        # node:test over lib/: CLI classification, eval parsing, argv
 ├── scripts/
 │   ├── link-dsh-deps.mjs # link $DSH_HOME @deepseek-ai types
 │   └── deploy.sh         # build + register tools + dump-config verify
@@ -90,3 +98,8 @@ Reusable rules:
 - **Resolve targets deterministically, then fail with options**: explicit argument → remembered binding → documented convention directory → refuse and list the choices. Do not create a target the user did not ask for, and do not guess among candidates.
 - **Tool `parameters` are a property map**: `{ name: { type, required?, description } }`, not a JSON Schema root. A JSON Schema root throws inside the tool API at load time and takes the whole plugin down — pin it with a test that registers every tool through the real validator.
 - **Report leftovers**: after installing files, list unexpected files in the target directory. A stale artifact from an earlier layout is a failure mode that only surfaces at runtime.
+- **A read must prove its own target**: for any command whose target depends on external state (which window is focused, which project is selected), return the identity *inside the same reading* — here, `app.vault.getName()` next to the data. Inferring the target from a separate probe is how a reading silently comes from the wrong place.
+- **Never trust an exit status over the output**: a CLI that prints `Error: …` and still exits `0` breaks every status-based check. Classify by output, and give "succeeded but printed nothing" its own category, because a silent timeout is not success.
+- **State lives outside your process**: another app caches what it read. Writing a file does not make the other side see it. Insert an explicit re-index between "written" and "visible" instead of leaving the caller to discover it.
+- **One safety switch at a time**: a per-scope security setting (here, per-vault restricted mode) is never a silent side effect of another operation. Give it its own explicit action that states the consequence and the blast radius.
+- **Do the foreground-sensitive steps in one sequence**: if an operation depends on external focus, run everything that needs it back-to-back. A user switching apps between two tool calls can invalidate the first one's setup.

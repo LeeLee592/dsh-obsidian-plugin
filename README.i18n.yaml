@@ -1,7 +1,7 @@
 # Bilingual consistency record for the repository README/DEVELOP files.
 # README.md and DEVELOP.md are the default English pages; *.zh.md are their Chinese counterparts.
 # Values are git blob hashes from the last confirmed-consistent review.
-README.md: 99d60e747d8a81137591d1d46647006c26ae2eea
-README.zh.md: 31f1b5515c52b54c7003e67c068a3459200243d7
-DEVELOP.md: eefd12c8eb93916658eea7bc1407b16c38d9ea58
-DEVELOP.zh.md: a66eb10872587bed1c9fb3698d387910cb4044f9
+README.md: 68ec97c67047dea596fb3509660df2719d5f1c17
+README.zh.md: 5120d4a7e0f475000b3f63560082b8fa744456ae
+DEVELOP.md: 71aed1b988786fbb19693b7f766c4a47caf4862d
+DEVELOP.zh.md: 4ec09d0109a2a511c08d4291832ebdfbdec38cfd

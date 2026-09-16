@@ -2,17 +2,20 @@
 ==========================================
 
 【What it is】
-A DeepSeek Harness capability for developing Obsidian plugins, with one knowledge skill and five tools:
+A DeepSeek Harness capability for developing Obsidian plugins, with one knowledge skill and eight tools:
 
 - obsidian-plugin skill (knowledge): Obsidian plugin development guidelines (naming/submission rules, accessibility, code quality, submission & Scorecard) that guide the agent's workflow.
 - obsidian_plugin_scaffold: generate a compliant plugin skeleton from the official obsidian-sample-plugin template (14 files), with built-in naming/submission checks.
 - obsidian_plugin_build: bundle the plugin project into a loadable main.js (CommonJS, obsidian externalized) and run static self-checks; three-tier degradation (project-local esbuild → the project's own production build script → an actionable refusal), never a watch process, and the tier actually used is reported.
 - obsidian_plugin_deploy: install the build artifacts into the vault's .obsidian/plugins/<id>/, merge the plugin id into that vault's community-plugins.json (existing entries preserved), and remember the vault in dsh.obsidian.json; reports written / enabled / active separately (active stays unknown until a later phase).
+- obsidian_plugin_inspect: read-only observation of the running app (it never changes it): status returns the health facts in one shot (app version, registered vaults, which vault actually answered, that vault's restricted-mode state, whether the target plugin is installed/enabled/version-matched, whether the trust modal is pending), plus errors / console / dom / css / screenshot / trustCheck.
+- obsidian_plugin_vault: manage the vault used for live verification: status reports registered vaults, the active window and what activation would take; ensure is a two-step confirmation — without confirm it only describes the consequences, with confirm=true it registers/opens the vault (Obsidian switches to the front) and then asks the app which vault is active, reporting the trust modal instead of accepting it; close closes the test window (macOS); prune is not implemented yet.
+- obsidian_plugin_reload: make a code change take effect in the running app: reload (default) / enable / disable; rescan refreshes the plugin manifest index (Obsidian scans a vault's plugin directory only at vault load, so a freshly deployed plugin stays invisible to every plugin command until then); unrestrict explicitly turns off that vault's restricted mode (it reloads the window); after reloading it verifies the plugin is really registered and reports what the plugin logged.
 - obsidian_plugin_validate: validate the manifest's required fields, naming rules, versions.json mapping, package.json version consistency, and run eslint-plugin-obsidianmd checks.
 - obsidian_plugin_version: bump manifest.json / versions.json / package.json together.
 
 【Usage】
-Tell DSH "create an Obsidian plugin …" and the agent loads the obsidian-plugin skill, follows the Obsidian Plugin Development Guidelines, and calls the tools along the way for scaffolding, building, deploying, validating, and versioning.
+Tell DSH "create an Obsidian plugin …" and the agent loads the obsidian-plugin skill, follows the Obsidian Plugin Development Guidelines, and calls the tools along the way for scaffolding, building, deploying, live verification, validating, and versioning.
 
 【Naming rules】(enforced by the tools; use for self-checks too)
 - id: lowercase letters/digits/dashes/underscores, no "obsidian", not ending with "plugin".
