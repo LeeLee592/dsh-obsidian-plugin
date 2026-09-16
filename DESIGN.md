@@ -36,7 +36,7 @@ scaffold → implement → build → test → deploy → enable/reload → inspe
 - **用官方能力，不自研协议层**：观察面优先复用 Obsidian 自带 CLI；缺口再补。
 - **不引入第三方运行时依赖**：沿用 `node:child_process` 底座。
 - **失败要说人话**：任何环境/权限/时序问题都返回可执行的下一步，而不是 stack trace。
-- **不替用户做安全决定**：涉及用户 App 全局设置的动作一律走确认。
+- **不替用户做安全决定**：涉及用户 App 设置（信任 / 受限模式）与窗口布局的动作一律走确认。
 - **沙箱诚实**：DSH 沙箱只约束本插件自己的文件写入；spawn 出去的子进程（`obsidian` CLI、esbuild、`open`）不受其约束。
 
 ---
@@ -86,30 +86,41 @@ DSH 在 macOS 用 `sandbox-exec` + SBPL 限制，profile 形如（见 `dsh-sandb
 
 - **命令面的窗口归属（重要）**：
 
-  | 类型 | 例 | 跨窗口定向（`vault=<name>`） |
+  | 命令族 | 解析依据 | 证据 |
   |---|---|---|
-  | App 级 | `plugin:enable`、`vaults`、`plugins:restrict` | ✅ 实测成功（`Enabled: feishu-style-editor` 落到非活动库） |
-  | 窗口级 | `dev:errors`、`dev:console`、`dev:dom`、`plugins:enabled`、`eval` | ⚠️ 只在**活动窗口**的库上可用；目标库不在前台时报 `Command "x" not found` |
+  | `plugin` / `plugin:reload` / `plugin:enable` / `plugins:enabled` / `dev:*` / `eval` / `command` | **活动窗口的库** | 活动库为 `Notes` 时 `plugin:reload id=<其他库的插件>` → `Plugin "x" not found`；`vault-open` 到目标库后同一命令 → `Reloaded` ✅ |
+  | `vaults` / `version` / `plugins:restrict` | 与窗口无关（App 级信息） | 在任意 CWD 下均可返回 |
 
-  → **要在哪个库上做窗口级观测，就先把那个库带到前台**（`vault-open`），否则会误判成「命令不存在」。
+  **`vault=<name>` 不能可靠地把 `plugin:*` / `dev:*` 重定向到非活动库**：实测对非前台库调用要么超时、要么报 `Command "x" not found`。
+  ⚠️ 一次早期观测（活动库未确认时 `plugin:enable` 返回 `Enabled: …`）曾被误读为「跨窗口成功」；按时间线复核（目标库的 `community-plugins.json` 在两天后才被写入）该输出**很可能来自当时的活动库**，故不作为证据。
+
+  → **铁律：先 `vault-open` 把目标库带到前台，再执行任何 `plugin:*` / `dev:*` / `eval` 命令**；否则既有「命令不存在」的误判，也有**打到错的库上**的风险。
 
 ### 2.4 信任弹窗（首次打开带插件的库时的阻塞点）
 
-**触发**：库里有 `community-plugins.json` 非空 + 全局「受限模式」开启 + 窗口首次加载 → 弹出 `mod-trust-folder` 模态框：
+**触发**：库里有 `community-plugins.json` 非空 + **该库**处于受限模式 + 窗口首次加载 → 弹出 `mod-trust-folder` 模态框：
 
 - 标题 i18n key `setting.thirdPartyPlugin.labelTrustAuthor`；
 - 按钮 1 = `buttonDontTrustAuthor`（取消，**什么都不做**）；
 - 按钮 2 = `buttonEnablePlugins`，实现是：
 
   ```js
-  await this.app.plugins.setEnable(true)   // ← 关闭【全局】受限模式，随后重载 App 窗口
+  await this.app.plugins.setEnable(true)   // ← 关闭【当前库】的受限模式，随后重载 App 窗口
   this.app.setting.open(); this.app.setting.openTabById("community-plugins")
   ```
 
 **三条硬事实**：
 
-1. **它是全局开关，不是 per-vault 标记**：`obsidian.json` 的 vault 条目只有 `path/ts/open`，vault 内 `app.json` 是空 `{}`，**没有 trust 字段**；判定依据是全局受限模式。→ 「写个字段绕过」不存在。
-2. **受限模式下 `plugin:enable` 仍会写盘成功**（实测 `Enabled: …` 已落到目标库的 `community-plugins.json`），但插件**不加载**。→ 必须区分「已写入 / 已启用 / 已生效」三态。
+1. **判定依据是「每库 × 每 App 实例」的受限模式**，而不是 `obsidian.json` 里的 trust 字段——该文件的 vault 条目只有 `path/ts/open`，vault 内 `app.json` 是空 `{}`。持久化实现（app.js）：
+
+   ```js
+   setEnable = function (e) { localStorage.setItem("enable-plugin-" + this.app.appId, e ? "true" : "false"); … }
+   isEnabled = function ()  { return "true" === localStorage.getItem("enable-plugin-" + this.app.appId) }
+   ```
+
+   实盘（活动库 TestVault）：`enabled: true`，且 localStorage 中并存 `enable-plugin-<各库 appId>=true`。
+   → **信任是逐库生效的**：信任测试库不会连带放行用户的其它库；但「写个 per-vault 字段绕过弹窗」依然不存在，因为判定读的是 localStorage 而非 vault 配置文件。
+2. **「已启用」与「已加载」必须分开判定**：`community-plugins.json` 只是启用清单（受管于 `enable-plugin-<appId>` 之外），在受限模式下**清单可以被写入，但插件不会被加载**。→ 报告里必须区分「已写入 / 已启用 / 已加载」三态，并以 `app.plugins.plugins`（或 `plugin id=` 的 `enabled`）作为「已加载」的唯一依据。
 3. **点击「信任」会重载 App 窗口**，因此**发起点击的那次 `eval` 不会返回**（实测超时）——这是预期行为，不是失败。
 
 **检测锚点（实测可用）**：`dev:dom selector=".mod-trust-folder" total`。注意弹窗是**异步渲染**的：`vault-open` 返回后立刻查可能得到 `No elements found.`，需要**带重试地轮询**（本次实测：30s 后查询命中 `1`）。
@@ -133,8 +144,20 @@ DSH 在 macOS 用 `sandbox-exec` + SBPL 限制，profile 形如（见 `dsh-sandb
 | **附加调试器后 `plugin:reload` 挂死** | `dev:debug on` 与其它命令冲突（本次复现 2 次；`dev:debug off` 后立即恢复） | 「读 console」必须在**独立窗口期**进行：attach → 读 → **立即 detach**，期间不跑 reload |
 | 命令静默超时（空输出） | IPC 卡顿 | 重试（1～2 次）；连续失败则判「App 无响应」并给出重启/重注册指引 |
 | `vault-open` 后立刻查 DOM 得到空 | 窗口异步渲染 | 轮询等待（带上限） |
-| 目标库不在前台 → 窗口级命令 not found | 命令面按窗口构建 | 先 `vault-open` 再观测 |
+| 目标库不在前台 → `Command/Plugin "x" not found` | 命令面按**活动窗口**解析 | 先 `vault-open` 把目标库带到前台，并在同一次读数里自证身份（见 §7.5） |
 | 端口/焦点被抢 | App 自身行为 | 提前告知用户；测试完可关闭窗口 |
+
+### 2.7 复核修订记录（本版相对上一版的更正）
+
+本文档在提交后经过一次专项复核，以下条目被**更正或降级**，实现时以本版为准：
+
+| 原结论 | 更正后 | 依据 |
+|---|---|---|
+| `plugin:enable` 是 App 级命令，`vault=` 可跨窗口定向 | **全部 `plugin:*` / `dev:*` / `eval` 按活动窗口解析**；`vault=` 对它们不可靠 | 活动库为 `Notes` 时 `plugin:reload` 报 `Plugin "x" not found`；`vault-open` 到目标库后同一命令返回 `Reloaded` |
+| 信任弹窗会关闭**全局**受限模式 | 受限模式是**每库 × 每 App 实例**（localStorage `enable-plugin-<appId>`） | app.js 的 `setEnable`/`isEnabled` 实现 + 实盘 localStorage 键 |
+| CLI 完成 enable 的跨库操作已实测 | 该输出的**目标库未确证**，降级为「部分验证」 | 目标库 `community-plugins.json` 的 mtime 晚于部署两天 |
+| 文档同步清单使用 `README{,.en}.md` 等旧名 | 仓库已改为 `README.md` / `README.zh.md`（英文默认）+ `README.i18n.yaml` | 仓库现行文件 |
+| 缺失 | **新增 §7.5「观测必须自证身份」**：读窗口级数据时须在同一次读数里返回 `app.vault.getName()` | 复核中曾误把用户真实库的插件列表当作 TestVault 的数据，根因是仅凭「CLI 报告的活动库」推断目标 |
 
 ---
 
@@ -258,7 +281,7 @@ Next: obsidian_plugin_inspect action=errors
   enabled: yes (config written)
   active:  NO — trust confirmation pending
   trust:   awaiting-user — Obsidian 需要你确认「信任仓库作者并启用插件」
-           （该操作会关闭全局受限模式；检测锚点 .mod-trust-folder）
+           （该操作会关闭【该库】的受限模式；检测锚点 .mod-trust-folder）
 ```
 
 **沙箱越界**返回结构化诊断（不是 stack trace）：工作区内 TestVault 为推荐路径 / 需更宽沙箱模式 / 手动安装三选一。
@@ -292,7 +315,7 @@ node <assets/harness/harness.cjs> <projectDir>/main.js [scenario.mjs]
 
 1. 工作区内建目录（可选写入 `README.md`）——**不预置 `.obsidian`**，让 App 自己初始化；
 2. **弹窗确认**（DSH client 弹窗）：展示目标绝对路径与后果清单——
-   「将在 Obsidian 中把该文件夹登记为仓库并打开窗口；**Obsidian 会切到前台**；若这是首次打开带插件的库，可能还会出现一次信任确认」；
+   「将在 Obsidian 中把该文件夹登记为库（vault）并打开窗口；**Obsidian 会切到前台**；若这是首次打开带插件的库，可能还会出现一次信任确认」；
 3. 确认后执行 `eval code='electron.ipcRenderer.sendSync("vault-open","<path>",false)'`（实测返回 `true`，`obsidian.json` 随之出现新条目，`.obsidian/` 被 App 自动创建）；
 4. **轮询直到登记出现**（`vaults` / `obsidian.json`），带上限与超时提示。
 
@@ -312,7 +335,7 @@ vault-open（内部 IPC，已实测）
 
 循环里调用最频繁的状态变更工具：`reload`（`plugin:reload`）/ `enable` / `disable`（`plugin:enable|disable`）。
 
-- 前置：目标库须在**前台**（窗口级命令属性）→ 必要时先 `vault-open`，或由 `deploy` 统一处理；
+- 前置：**目标库必须是当前活动窗口**（`plugin:*` 按活动窗口解析）→ 由 `deploy` 或 `vault ensure` 保证；工具自身也应在执行前自检活动库并在不符时先 `vault-open`；
 - **重试策略**：单次超时（默认 20s）后重试 1 次；
 - **已知冲突**：若检测到调试器已附加（刚读过 console），**先拒绝执行并提示**——实测附加状态下 `plugin:reload` 会挂死；
 - 返回里区分「已重载」与「重载后校验通过」。
@@ -323,7 +346,7 @@ vault-open（内部 IPC，已实测）
 |---|---|---|
 | `status`（默认） | `version` + `vault` + `vaults` + `plugins:enabled` + `plugin id=` + `plugins:restrict` | **一次拿全体检事实**；含「目标库是否前台」「是否受限模式」「是否需要信任确认」 |
 | `errors` | `dev:errors [clear]` | 无需调试器 |
-| `console` | `dev:debug on` → `dev:console` → **`dev:debug off`** | **必须在同一窗口期内 attach→读→detach**，期间禁止 reload；返回里说明该约束 |
+| `console` | `dev:debug on` → `dev:console` → **`dev:debug off`** | **必须在同一窗口期内 attach→读→detach**；**与 reload 互斥**（附加状态下 reload 必挂，实测复现 2 次）；返回里说明该约束并提示调用方「读完再重启插件」 |
 | `dom` | `dev:dom selector=… [text\|attr\|total\|all\|inner]` | 弹窗检测、UI 断言 |
 | `css` | `dev:css selector=… [prop=]` | 样式与生效值 |
 | `screenshot` | `dev:screenshot path=<workspace 内绝对路径>` | **只截 Obsidian 窗口**；命令可能挂住但文件已写出 → 先查文件存在性，再判定超时 |
@@ -334,8 +357,8 @@ vault-open（内部 IPC，已实测）
 ### 4.7 `obsidian_plugin_eval`（高特权，必审）
 
 - `code`：在 App 上下文执行 JS（底层 `obsidian eval code=…`），**返回值回显实际执行的代码**便于审计；
-- 常见用法要走 skill 里给的「配方」而不是让模型即兴写（见 §6）；
-- **审批是唯一一道闸**：`setEnable`、`vault-open` 这类能改变 App 全局状态/窗口布局的调用，必须经用户同意；
+- 常见用法要走 skill 里给的「配方」而不是让模型即兴写（见 §5.2）；
+- **审批是唯一一道闸**：`vault-open`（改变窗口布局）与 `setEnable`（改变目标库的受限模式）这类调用必须经用户同意；
 - 输出同样截断。
 
 ### 4.8 信任弹窗处理（跨工具的横切协议）
@@ -345,7 +368,7 @@ vault-open（内部 IPC，已实测）
    · 受限模式 on → 提前告知会弹窗（而不是等用户看见）
 ② 检测：.mod-trust-folder（带重试轮询）
    · 命中 → 立即停止后续步骤，返回 awaiting-user + 弹窗语义 + 两个选项
-     「① 我去 Obsidian 里点『信任仓库作者并启用插件』 ② 授权我用 eval 关闭全局受限模式并重载」
+     「① 我去 Obsidian 里点『信任仓库作者并启用插件』 ② 授权我用 eval 为该库关闭受限模式（会重载窗口）」
 ③ 用户选择后：
    · 选① → 轮询 trustCheck 直到消失，再继续
    · 选② → eval app.plugins.setEnable(true)（**会重载窗口，该调用不会正常返回，属预期**）
@@ -353,7 +376,7 @@ vault-open（内部 IPC，已实测）
 ④ 复检：插件实例是否出现、errors 是否干净
 ```
 
-**红线**：① 永不静默点击「信任」；② 把「已写盘」「已启用」「已加载」三态分开报告；③ 弹窗存在时**不继续执行任何窗口级命令**（只会得到无意义输出）。
+**红线**：① 永不静默点击「信任」；② 把「已写盘」「已启用」「已加载」三态分开报告；③ 弹窗存在时**不继续执行任何 `plugin:*` / `dev:*` / `eval` 命令**（只会得到无意义输出）；④ `console` 读取与 `reload` **互斥**：读 console 时必须 attach → 读 → 立即 detach，期间禁止 reload（实测附加状态下 reload 必挂）。
 
 ### 4.9 环境体检（preflight）与降级矩阵
 
@@ -430,7 +453,7 @@ vault-open（内部 IPC，已实测）
 | 插件没出现在 Obsidian 里 | `inspect status` | 库选错 / restricted 模式 / 未重启 |
 | 装了但功能没生效 | `vault status` → 查信任弹窗 | 首次信任未确认（插件不加载） |
 | 改了代码没变化 | `reload` | 未重载，旧 bundle 在内存 |
-| `Command "x" not found` | 先带目标库到前台 | 窗口级命令只在活动库可用 |
+| `Command "x" not found` / `Plugin "x" not found` | 先带目标库到前台 | `plugin:*` 与 `dev:*` 都只作用于活动窗口的库 |
 | 命令无输出且很慢 | 重试一次 | CLI IPC 卡顿（挂死时输出为空） |
 | 刚读过 console 后 reload 卡住 | 先 `dev:debug off` | 调试器附加与 reload 冲突 |
 | UI 不对 | `inspect dom/css/screenshot` | 选择器作用域、CSS 变量、无障碍 |
@@ -441,7 +464,7 @@ vault-open（内部 IPC，已实测）
 **`reference/obsidian-cli.md`**（逃生舱 + 环境隐知识，**不复制命令目录**，开头一句「完整命令清单以 `obsidian help` 与官方文档为准」）：
 
 - CLI 三原则：需要 App 运行 / 出错也可能 exit 0 / **调用必须包超时**；
-- **窗口归属**：App 级 vs 窗口级命令（含 `vault=` 的适用边界）；
+- **窗口归属**：`plugin:*` / `dev:*` / `eval` 一律按活动窗口解析，`vault=` 不可靠；先用 `vault-open` 带前台；
 - vault 注册表与 `vault-open` 内部通道；
 - 信任弹窗语义与其全局影响；
 - **本次实测的坑清单**：调试器附加会挂住 reload、弹窗异步渲染、截图可能不返回但文件已写、`dev:console` 需 attach、命令静默超时的重试策略。
@@ -463,7 +486,7 @@ electron.ipcRenderer.sendSync("vault-open","<abs path>",false)
 
 ### 5.3 其它文档（遵守 AGENTS.md 同步约定）
 
-`doc/harness.default.md`（能力清单/使用规则）、`doc/manual.{zh,en}.txt`、`doc/version-notes.json`（新增 0.4.0 条目）、`README{,.en}.md`、`DEVELOP{,.en}.md`（沉淀 §7 的通用规则）。
+`README.md` / `README.zh.md`（英文为默认语言）、`DEVELOP.md` / `DEVELOP.zh.md`（沉淀 §7 的通用规则）、`README.i18n.yaml`（多语言元数据）、`AGENTS.md`（若新增约定）、`doc/harness.default.md`（能力清单/使用规则）、`doc/manual.zh.txt` / `doc/manual.en.txt`、`doc/version-notes.json`（新增 0.4.0 条目）、`assets/skills/obsidian-plugin/SKILL.md`。
 
 ---
 
@@ -509,11 +532,11 @@ assets/
 
 | 编号 | 场景 | 期望 | 状态 |
 |---|---|---|---|
-| A1 | 往 TestVault 部署真实插件 → enable → reload → inspect | enabled/active 均为 yes，`plugin:reload` 返回 `Reloaded`，errors 干净 | ✅ **本次已跑通** |
-| A2 | 首次打开带插件的库 | 检测到 `.mod-trust-folder`，返回 awaiting-user，**不自动点击** | ✅ 弹窗已实测复现并消除 |
+| A1 | 往 TestVault 部署真实插件 → enable → reload → inspect | enabled/active 均为 yes，`plugin:reload` 返回 `Reloaded`，errors 干净 | ⚠️ **部分验证**：部署/加载/reload/errors 通路可用；`enable` 由 CLI 完成的那一步**目标库未能确证**（时间线显示目标库的 `community-plugins.json` 于两天后才被写入），需一次干净复测 |
+| A2 | 首次打开带插件的库 | 检测到 `.mod-trust-folder`，返回 awaiting-user，**不自动点击** | ✅ 弹窗已实测复现、检测锚点可用 |
 | A3 | Obsidian 未运行 | build/test 正常；deploy 落盘成功并提示「需打开 App 生效」 | 待验 |
 | A4 | vault 在工作区外 | 结构化三选一诊断，无 stack trace | 待验 |
-| A5 | 受限模式开启 | `inspect status` 明确提示，并提前预警信任弹窗 | ✅ 机制已确认 |
+| A5 | 受限模式开启（逐库） | `inspect status` 明确提示该库的受限状态，并提前预警信任弹窗 | ✅ 机制已确认（含 per-vault 存储） |
 | A6 | 调试器已附加时调用 reload | 拒绝执行并提示先 detach，不挂死 | ✅ 冲突已复现 |
 | A7 | CLI 静默超时 | 重试后成功；连续失败报「App 无响应」+ 恢复指引 | ✅ 现象已复现 |
 | A8 | 非模板工程（无 esbuild.config.mjs） | 默认参数构建成功或给出明确指引 | 待验 |
@@ -526,15 +549,16 @@ assets/
 1. **外部 CLI 不得信任退出码**：出错也可能返回 0；判定以输出为准（`^Error:`）。
 2. **空输出 ≠ 成功**：必须把「静默超时/挂死」单独归类，否则会把挂死误判为成功。
 3. **所有外部调用带超时 + 重试**：CLI 卡顿是常态；连续失败才判环境故障。
-4. **窗口归属决定命令可用性**：窗口级命令只在目标库处于前台时可用；App 级命令可跨库。跨库操作先带前台。
-5. **产物落盘 ≠ 生效**：安装类工具必须区分「已写入 / 已启用 / 已加载」三态。
-6. **不替用户做安全决定**：涉及全局安全开关（受限模式/信任）的动作一律确认，绝不静默执行。
-7. **异步 UI 要轮询、不要单次判定**：弹窗/窗口渲染都是异步的（实测 30s 后才命中）。
-8. **不可逆或改变用户环境的动作要显式**：打开/关闭窗口、切库、启动 App 都属此类。
-9. **观测类工具限流截断**：日志/求值结果必须限额，避免噪声淹没有效上下文。
-10. **降级要写进返回值**：每级降级（无 CLI / 无 esbuild / 无前台窗口 / 信任未决 / 沙箱越界）都显式出现在结果里。
-11. **未文档化的内部通道要留退路**：`vault-open` 一类内部 IPC 必须配一条人工兜底路径，并允许整链降级。
-12. **沙箱只约束自己**：`ctx.fs` 受 policy 约束，spawn 的子进程不受约束——文档必须写明。
+4. **活动窗口即目标**：`plugin:*` / `dev:*` / `eval` 全部按活动窗口的库解析，`vault=` 不可靠；任何跨库操作前先 `vault-open`。
+5. **观测必须自证身份**：凡读取窗口级数据（DOM、插件实例、日志缓冲），都要在**同一次读数**里返回 `app.vault.getName()`（必要时加 `app.appId`）。仅凭「CLI 报告的活动库」推断目标是本次验证中所有返工的根因。
+6. **产物落盘 ≠ 生效**：安装类工具必须区分「已写入 / 已启用 / 已加载」三态。
+7. **不替用户做安全决定**：涉及受限模式（信任）等安全开关的动作一律确认，绝不静默执行。
+8. **异步 UI 要轮询、不要单次判定**：弹窗/窗口渲染都是异步的（实测 30s 后才命中）。
+9. **不可逆或改变用户环境的动作要显式**：打开/关闭窗口、切库、启动 App 都属此类。
+10. **观测类工具限流截断**：日志/求值结果必须限额，避免噪声淹没有效上下文。
+11. **降级要写进返回值**：每级降级（无 CLI / 无 esbuild / 无前台窗口 / 信任未决 / 沙箱越界）都显式出现在结果里。
+12. **未文档化的内部通道要留退路**：`vault-open` 一类内部 IPC 必须配一条人工兜底路径，并允许整链降级。
+13. **沙箱只约束自己**：`ctx.fs` 受 policy 约束，spawn 的子进程不受约束——文档必须写明。
 
 ---
 
@@ -545,7 +569,7 @@ assets/
 | 内部 IPC（`vault-open`）在未来版本变更 | 首次登记自动化失效 | 降级链 + 人工兜底（§4.4）；集中在一处实现便于跟随官方 |
 | CLI 处于 Early Access，命令面变化 | L3 能力波动 | 能力探测 + 降级；`dev:cdp` 作逃生舱 |
 | CLI 挂死/卡顿（本次多次复现） | 工具返回慢或误判 | 超时 + 重试 + 空输出判定；必要时提示重启 App/重注册 |
-| 信任弹窗与全局受限模式绑定 | 影响用户其它库 | 只引导不代点；三态报告；提前预警 |
+| 信任弹窗与**每库**受限模式绑定（localStorage `enable-plugin-<appId>`） | 在测试库上的信任不会波及其它库；但弹窗本身会阻塞加载 | 只引导不代点；三态报告；提前预警 |
 | 真机操作会切走用户窗口 | 打扰用户 | 优先测试库；`ensure` 前确认；`close` 回收 |
 | 离线桩与真实 API 有差异 | 假阳性 | 固定标注「桩环境」；断言只覆盖结构性事实 |
 | 截图/日志含私有内容 | 隐私 | 只落盘到工作区内；不做自动上传 |
@@ -566,12 +590,12 @@ obsidian plugins:enabled filter=community
 obsidian plugin id=<id>
 obsidian plugins:restrict
 
-# 装载（App 级，可 vault= 定向）
+# 装载（按活动窗口解析：先 vault-open 带前台）
 obsidian plugin:enable  id=<id> filter=community
 obsidian plugin:reload  id=<id>
 obsidian plugin:disable id=<id>
 
-# 观测（窗口级：目标库须在前台）
+# 观测（同样按活动窗口解析）
 obsidian dev:errors [clear]
 obsidian dev:debug on && obsidian dev:console limit=50 && obsidian dev:debug off
 obsidian dev:dom selector=".workspace-leaf" [text|attr=class|total|all|inner]
@@ -589,8 +613,10 @@ obsidian reload | restart
 ```js
 // 打开/登记一个库（渲染进程全局 electron 可用）
 electron.ipcRenderer.sendSync("vault-open", "<abs path>", false)   // → true
-// 关闭全局受限模式（等价用户点「信任仓库作者并启用插件」，会重载窗口）
+// 关闭【当前库】的受限模式（等价用户点「信任仓库作者并启用插件」，会重载窗口）
 app.plugins.setEnable(true)
+// 当前库的受限模式状态与目标自证（推荐每次读取都带上）
+({vault:app.vault.getName(), appId:app.appId, restricted:!app.plugins.isEnabled()})
 // 信任弹窗检测锚点
 document.querySelectorAll(".mod-trust-folder").length
 ```
