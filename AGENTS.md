@@ -20,6 +20,29 @@ On any architecture / interface / naming change (adding, removing, or renaming t
 - [doc/version-notes.json](doc/version-notes.json)
 - [assets/skills/obsidian-plugin/SKILL.md](assets/skills/obsidian-plugin/SKILL.md)
 
+### Version bumps are released by tag (mandatory)
+
+Every commit that changes the `version` field in [package.json](package.json) must also create and push a matching **annotated** tag in the same push:
+
+```bash
+# 1) the version bump, in the same commit as the change it releases
+#    package.json version -> 0.6.0, plus a doc/version-notes.json entry for 0.6.0
+git commit -am "feat: …"
+# 2) the tag, naming the exact commit that carries that version
+git tag -a v0.6.0 -m "v0.6.0: <one-line summary>
+
+<what changed and how it was verified>"
+git push origin main v0.6.0
+```
+
+Why this is mandatory:
+
+- Pushing a `v*` tag is what triggers `.github/workflows/release.yml` — it publishes the package to npm and creates the GitHub Release. A version bump without a tag ships nothing, and the tag can never be reconstructed later, because the release must point at the commit whose `package.json` carries that version.
+- The tag name must match the `package.json` version exactly (`v` + version). npm rejects republishing a version, so a tag pointing at the wrong commit cannot be fixed by retagging — it burns that version number.
+- Annotated tags are required: they carry the summary of what shipped, which is what the GitHub Release shows.
+
+Related: add the `doc/version-notes.json` entry for the version in the same commit, and keep the other synced docs current (see "Doc sync" above).
+
 ### Reusable rules
 
 Lessons learned while implementing tools must be **generalized into reusable rules** (not concrete implementation details), then distilled into the "## Tool Implementation Notes" section of [DEVELOP.md](DEVELOP.md) and synced to [DEVELOP.zh.md](DEVELOP.zh.md).
