@@ -5,7 +5,7 @@
 [![Listed on dsh-plugin.org](https://dsh-plugin.org/badges/listed.svg)](https://dsh-plugin.org/plugins/leelee592/dsh-obsidian-plugin)
 [![dshfind](https://dshfind.com/api/badge/LeeLee592/dsh-obsidian-plugin?lang=en)](https://dshfind.com/plugins/LeeLee592/dsh-obsidian-plugin?ref=badge)
 
-Provides DeepSeek Harness (DSH) agents with Obsidian plugin development capabilities: scaffolding, validation, version syncing, plus a development-guidelines skill.
+Provides DeepSeek Harness (DSH) agents with Obsidian plugin development capabilities: scaffolding, building, deploying, validation, version syncing, plus a development-guidelines skill.
 
 ## Features
 
@@ -16,6 +16,8 @@ Provides DeepSeek Harness (DSH) agents with Obsidian plugin development capabili
 ### tools
 
 - **`obsidian_plugin_scaffold`**: generates a compliant plugin skeleton from the official [obsidianmd/obsidian-sample-plugin](https://github.com/obsidianmd/obsidian-sample-plugin) template, with built-in naming/submission checks.
+- **`obsidian_plugin_build`**: bundles a plugin project into a loadable `main.js` (CommonJS, `obsidian` externalized) and runs static self-checks; degrades through three tiers (project-local esbuild → the project's own production `build` script → an actionable refusal), never starts a watch process, and reports which tier it used.
+- **`obsidian_plugin_deploy`**: installs the built artifacts into `<vault>/.obsidian/plugins/<id>/` and adds the id to that vault's `community-plugins.json` (merged, existing entries preserved), then remembers the vault in `dsh.obsidian.json`; reports `written` / `enabled` / `active` separately (`active` stays `unknown` until a later phase).
 - **`obsidian_plugin_validate`**: validates manifest required fields, naming rules, `versions.json` mapping, and `package.json` version consistency, and lints code with the official [obsidianmd/eslint-plugin](https://github.com/obsidianmd/eslint-plugin) (eslint-plugin-obsidianmd).
 - **`obsidian_plugin_version`**: syncs versions across `manifest.json` / `versions.json` / `package.json`.
 
@@ -27,7 +29,7 @@ dsh plugin --profile web add @leelee592/dsh-obsidian-plugin
 
 ## Usage
 
-Tell DSH "create an Obsidian plugin …" and the agent loads the `obsidian-plugin` skill, follows the *Obsidian Plugin Development Guidelines*, and calls `obsidian_plugin_scaffold` / `obsidian_plugin_validate` / `obsidian_plugin_version` along the way for scaffolding, validation, and versioning.
+Tell DSH "create an Obsidian plugin …" and the agent loads the `obsidian-plugin` skill, follows the *Obsidian Plugin Development Guidelines*, and calls `obsidian_plugin_scaffold` / `obsidian_plugin_build` / `obsidian_plugin_deploy` / `obsidian_plugin_validate` / `obsidian_plugin_version` along the way for scaffolding, building, deploying, validation, and versioning.
 
 ## Docs
 

@@ -234,21 +234,27 @@ L1/L2 在**任何环境**都能跑；L3 不可用时降级为 L1+L2 并**明确�
 
 **三级降级**（逐级在返回值中标注用了哪一级）：
 
-1. 项目有 `node_modules/.bin/esbuild` → 直接调二进制（`--bundle --external:obsidian … --format=cjs --target=es2021 --outfile=main.js`；dev 追加 `--sourcemap=inline`）。不依赖 `pnpm` 是否存在。
-2. 无 `esbuild.config.mjs` → 用内置默认参数（外部化 `obsidian`、`electron`、`@codemirror/*`、`@lezer/*`、Node 内置模块）。
-3. 无本地 esbuild → 不强行构建，返回「先 `pnpm install`」或「用项目自身的 `build` 脚本」的明确指引。
+1. 项目有 `node_modules/.bin/esbuild` → 直接调二进制（`--bundle --external:… --format=cjs --target=es2018 --platform=browser --outfile=main.js`）。不依赖 `pnpm` 是否存在，也不受项目自身 `esbuild.config.mjs` 是否进入 watch 影响。
+2. 无本地 esbuild 且项目有 `build` 脚本 → 调 **production** 脚本（`pnpm`/`npm run build`）。
+3. 无本地 esbuild 也无可用脚本 → 不强行构建，返回「先 `pnpm install`」的明确指引。
+
+**外部化清单必须包含 Node 内置模块**（`crypto` / `path` / …，两种写法 `crypto` 与 `node:crypto` 都要）。实现时用真实第三方插件验证才发现：float-mark 用 `import { createHash } from "crypto"`，而 `--platform=browser` 下 esbuild 无法解析内置模块，若只外部化 `obsidian`/`electron`/`@codemirror/*`/`@lezer/*` 会直接构建失败。官方模板与真实插件的 esbuild 配置都外部化了 builtins。
+
+**绝不调用项目的 `dev` 脚本**：它是 watch 进程，永不退出（float-mark 的 `esbuild.config.mjs` 在非 production 分支调用 `context.watch()`）。工具调用必须返回，因此降级只走 production 脚本。
 
 **L1 自检项**：
 
 | 检查 | 判定 |
 |---|---|
 | `main.js` 存在且非空 | fail（附 esbuild 输出） |
-| CJS 且有导出 | fail（提示 `format: 'cjs'`） |
+| CJS 且有导出（静态扫描 `module.exports` / `exports.x`） | fail（提示 `format: 'cjs'`） |
 | 产物中 `require("obsidian")` 存在 | 缺失则 warn——**obsidian 被打进 bundle 会在运行时炸** |
-| manifest / versions.json / package.json 版本一致 | fail（提示跑 `validate`） |
-| `styles.css` 存在 | 缺失 warn（提交要求） |
+| manifest / versions.json / package.json 版本一致 | warn（提示跑 `validate`） |
+| submission 命名规则 | warn |
 
-**不做**：不接管 `pnpm run dev` 常驻 watch（交给用户或 DSH 后台任务）；产物 `main.js` 本就在模板 `.gitignore` 中，不污染仓库。
+**措辞纪律**：返回值固定声明「static scans of the bundle, not a load test」，**不得**让静态扫描听起来像加载验证；`production` 参数在走项目自带 esbuild 时只是「上报口径」而非产物保证（实际输出由项目自己的 config 决定）。
+
+**不做**：不接管常驻 watch（交给用户或 DSH 后台任务）；产物 `main.js` 本就在模板 `.gitignore` 中，不污染仓库。
 
 ### 4.2 `obsidian_plugin_deploy`
 
@@ -494,37 +500,36 @@ electron.ipcRenderer.sendSync("vault-open","<abs path>",false)
 
 ### 6.1 目录结构
 
+P0 已落地的结构（**实际实现**，未按 `infra/ + domain/` 建子目录——同层文件不多时目录嵌套只增加跳转成本）：
+
 ```
 src/
-├── index.ts                # apply()：注册 10 个工具 + skill；Config
-├── infra/
-│   ├── fs.ts               # Fs seam（抽取，含 sandboxPolicy 传递）
-│   ├── proc.ts             # spawnSync 封装：超时、重试、三态判定（正常/Error/空输出）
-│   └── preflight.ts        # CLI/App/vault/restricted/trust/esbuild 探测（单次调用内缓存）
-├── domain/
-│   ├── naming.ts           # 既有 namingProblems / render / toClassName
-│   ├── build.ts            # esbuild 三级降级 + L1 自检
-│   ├── vault.ts            # 注册表读取 + 部署 + community-plugins.json 语义 + vault-open
-│   ├── trust.ts            # 信任弹窗检测/引导/复检（横切协议）
-│   ├── smoke.ts            # 离线冒烟编排
-│   └── probe.ts            # CLI 动作映射与输出规整（含截断）
-└── tools/                  # 每个工具的 defineTool 声明
+├── index.ts        # apply()：注册工具 + skill；Config；既有 scaffold/validate/version 与模板、skill 注册
+├── fs.ts           # Fs seam：路径双身份（OS 路径 / FsTarget）、sandboxPolicy 传递、workspaceRoot 贯穿
+├── proc.ts         # spawnSync 封装：超时、退出码与空输出分类（run/hasExecutable）
+├── naming.ts       # 提交命名规则 + 模板占位符渲染 + semver 判定
+├── build.ts        # obsidian_plugin_build：三级降级 + L1 静态自检
+├── deploy.ts       # obsidian_plugin_deploy：vault 解析、产物安装、enable 列表合并、绑定写入
+└── bundle-doc.ts   # 包内 doc/ 资源读取
+test/
+└── p0.test.ts      # node:test，跑在 lib/ 产物上（裸 Node，无需 harness）
 assets/
-├── templates/              # 与官方 sample-plugin 保持一致（不塞测试文件）
-├── harness/                # harness.cjs + obsidian-stub.cjs + scenarios/example.mjs
-└── skills/obsidian-plugin/ # SKILL.md + reference/{obsidian-cli,debugging-playbook}.md
+├── templates/      # 与官方 sample-plugin 保持一致
+└── skills/obsidian-plugin/   # SKILL.md + reference/
 ```
 
-`src/index.ts` 现为 434 行且同时承载工具声明/业务/FS seam，新增工具前必须先分层（对外行为不变：既有 3 个工具的参数与返回文案不动）。
+P1+ 预留（尚未创建）：`preflight.ts`（CLI/App/vault/受限模式/信任 探测）、`vault.ts`（`vault-open` 与库生命周期）、`trust.ts`（信任弹窗横切协议）、`probe.ts`（CLI 动作映射与输出截断）、`assets/harness/`（离线冒烟）、`assets/skills/.../reference/{obsidian-cli,debugging-playbook}.md`。
+
+**分层原则**：`index.ts` 只做「组合 + 工具声明」，任何可被测试直接调用的逻辑都放在可独立导入的模块里（`test/` 直接从 `lib/` 导入，不经过 Cordis）。
 
 ### 6.2 分阶段实施
 
-| 阶段 | 内容 | 交付价值 | 依赖 |
-|---|---|---|---|
-| **P0** | `build` + `deploy`（离线路径）+ `dsh.obsidian.json` 绑定 | 「装得进去」，无 CLI 也能用 | 无 |
-| **P1** | preflight + `vault` + `reload` + `inspect`（含信任协议） | 「跑得起来、看得见」 | Obsidian + CLI |
-| **P2** | `test` + `assets/harness` | 无 App 环境的冒烟回归 | Node |
-| **P3** | `eval` + 审批策略 + skill/文档同步 + `src/` 分层重构 | 完整闭环与可维护性 | P0–P2 |
+| 阶段 | 内容 | 交付价值 | 依赖 | 状态 |
+|---|---|---|---|---|
+| **P0** | `build` + `deploy`（离线路径）+ `dsh.obsidian.json` 绑定 | 「装得进去」，无 CLI 也能用 | 无 | ✅ **已实现**（14 项测试 + 真实第三方插件 float-mark 端到端验证） |
+| **P1** | preflight + `vault` + `reload` + `inspect`（含信任协议） | 「跑得起来、看得见」 | Obsidian + CLI | 待做 |
+| **P2** | `test` + `assets/harness` | 无 App 环境的冒烟回归 | Node | 待做 |
+| **P3** | `eval` + 审批策略 + skill/文档同步 + `src/` 分层重构 | 完整闭环与可维护性 | P0–P2 | 部分完成（`src/` 已分层；skill/文档随 P0 同步） |
 
 **P0 与 P1 的边界是刻意的**：先把不依赖 CLI 的部署做扎实，再叠加有 CLI 时的体验增强。
 

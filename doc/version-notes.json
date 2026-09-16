@@ -1,5 +1,27 @@
 [
   {
+    "version": "0.4.0",
+    "date": "2026-09-16",
+    "zh": {
+      "title": "新增构建与部署工具",
+      "items": [
+        "新增 obsidian_plugin_build：把插件项目打包成可加载的 main.js（CommonJS，obsidian 外部化）并做静态自检，补齐 build → deploy 这半程开发闭环。",
+        "构建三级降级：项目本地 esbuild → 项目自身的 production build 脚本 → 给出可操作的报错；绝不启动 watch 进程，并在返回值中报告实际使用的层级。",
+        "新增 obsidian_plugin_deploy：把构建产物装进 vault 的 .obsidian/plugins/<id>/，并把 id 合并进该库的 community-plugins.json（保留既有条目），同时把 vault 记入项目旁的 dsh.obsidian.json。",
+        "部署三态分列报告、不混为一谈：written（已写入）/ enabled（已启用）/ active（是否被运行中的 Obsidian 加载，本阶段恒为 unknown）——写盘与启用不等于插件已加载。"
+      ]
+    },
+    "en": {
+      "title": "Add build and deploy tools",
+      "items": [
+        "New obsidian_plugin_build: bundles a plugin project into a loadable main.js (CommonJS, obsidian externalized) with static self-checks, completing the build → deploy half of the loop.",
+        "Three-tier build degradation: project-local esbuild → the project's own production build script → an actionable refusal; never a watch process, and the tier actually used is reported.",
+        "New obsidian_plugin_deploy: installs the build artifacts into the vault's .obsidian/plugins/<id>/, merges the id into that vault's community-plugins.json (existing entries preserved), and remembers the vault in dsh.obsidian.json.",
+        "Deploy reports the three states separately and never conflates them: written / enabled / active (whether the running app loaded it stays unknown in this phase) — files on disk and an enable-list entry are not a loaded plugin."
+      ]
+    }
+  },
+  {
     "version": "0.3.0",
     "date": "2026-09-13",
     "zh": {

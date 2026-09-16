@@ -2,15 +2,17 @@
 ==========================================
 
 【这是什么插件】
-给 DeepSeek Harness 智能体提供 Obsidian 插件开发能力，包含一个知识 skill 与三个工具：
+给 DeepSeek Harness 智能体提供 Obsidian 插件开发能力，包含一个知识 skill 与五个工具：
 
 - obsidian-plugin skill（知识库）：提供 Obsidian 插件开发规范（命名/提交规则、无障碍、代码质量、提交与 Scorecard），指导 agent 的开发流程。
 - obsidian_plugin_scaffold：基于官方 obsidian-sample-plugin 模板生成合规插件骨架（14 个文件），内置命名/提交规则校验。
+- obsidian_plugin_build：把插件项目打包成可加载的 main.js（CommonJS，obsidian 外部化）并做静态自检；三级降级（项目本地 esbuild → 项目自身的 production build 脚本 → 给出可操作的报错），不启动 watch 进程，并报告实际使用的层级。
+- obsidian_plugin_deploy：把构建产物安装进 vault 的 .obsidian/plugins/<id>/，并把插件 id 合并进该库的 community-plugins.json（保留既有条目），随后把该 vault 记入项目旁的 dsh.obsidian.json；分列报告 written / enabled / active 三态（active 在后续阶段前恒为 unknown）。
 - obsidian_plugin_validate：校验 manifest 必填字段、命名规则、versions.json 映射与 package.json 版本一致性，并运行 eslint-plugin-obsidianmd 检查。
 - obsidian_plugin_version：同步 manifest.json / versions.json / package.json 三处版本。
 
 【使用】
-对 DSH 说「帮我新建一个 Obsidian 插件…」，agent 会加载 obsidian-plugin skill，按照 Obsidian Plugin Development Guidelines 的指导进行开发，并在过程中调用工具完成脚手架、校验与版本管理。
+对 DSH 说「帮我新建一个 Obsidian 插件…」，agent 会加载 obsidian-plugin skill，按照 Obsidian Plugin Development Guidelines 的指导进行开发，并在过程中调用工具完成脚手架、构建、部署、校验与版本管理。
 
 【命名规则】（工具内置校验，也用于自行检查）
 - id：小写字母/数字/连字符/下划线，不含 "obsidian"，不以 "plugin" 结尾。

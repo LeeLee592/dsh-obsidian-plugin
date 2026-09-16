@@ -1,6 +1,6 @@
 ---
 name: obsidian-plugin
-description: Guidelines for developing, validating, and submitting Obsidian community plugins. Covers plugin authoring best practices (memory management, type safety, UI/UX, file & vault operations, CSS, accessibility, code quality) and submission & validation (eslint-plugin-obsidianmd rules, community scanner, manifest/naming requirements). Use when working with Obsidian plugins, main.ts, manifest.json, Plugin class, or vault operations. Pair with the obsidian_plugin_scaffold, obsidian_plugin_validate, and obsidian_plugin_version tools.
+description: Guidelines for developing, validating, and submitting Obsidian community plugins. Covers plugin authoring best practices (memory management, type safety, UI/UX, file & vault operations, CSS, accessibility, code quality) and submission & validation (eslint-plugin-obsidianmd rules, community scanner, manifest/naming requirements). Use when working with Obsidian plugins, main.ts, manifest.json, Plugin class, or vault operations. Pair with the obsidian_plugin_scaffold, obsidian_plugin_build, obsidian_plugin_deploy, obsidian_plugin_validate, and obsidian_plugin_version tools.
 license: MIT
 metadata:
   version: 1.10.1
@@ -12,11 +12,13 @@ metadata:
 
 ## DSH Tools
 
-与本 skill 配套的三个确定性工具（参数由 DSH 调用时自行确认）：
+与本 skill 配套的五个确定性工具（参数由 DSH 调用时自行确认）：
 
 | 工具 | 用途 |
 |---|---|
 | `obsidian_plugin_scaffold` | 基于官方 obsidian-sample-plugin 模板生成合规插件骨架，内置命名/提交规则校验 |
+| `obsidian_plugin_build` | 把插件项目打包成可加载的 main.js（CommonJS，obsidian 外部化）并做静态自检；三级降级、绝不启动 watch，并报告实际使用的层级 |
+| `obsidian_plugin_deploy` | 把构建产物装进 vault 的 .obsidian/plugins/<id>/ 并更新该库的 community-plugins.json，随后把 vault 记入 dsh.obsidian.json；written / enabled / active 三态分列报告 |
 | `obsidian_plugin_validate` | 校验 manifest 必填字段、命名规则、versions.json 映射、package.json 版本一致性，并运行 eslint-plugin-obsidianmd 检查 |
 | `obsidian_plugin_version` | 同步 manifest.json / versions.json / package.json 三处版本 |
 
@@ -26,9 +28,11 @@ metadata:
 
 1. **脚手架** — 新建插件时调用 `obsidian_plugin_scaffold`（先确认 id/name/description 符合命名规则）。
 2. **实现** — 按「插件编写规范」编写功能代码。
-3. **校验** — 调用 `obsidian_plugin_validate` 检查结构与命名并运行 eslint；按返回错误修正后重跑，直到通过。
-4. **版本** — 发布时调用 `obsidian_plugin_version` 统一升级版本号。
-5. **提交** — 按「校验与提交」表格完成社区扫描与发布准备。
+3. **构建** — 改完代码调用 `obsidian_plugin_build` 打包出 main.js 并跑静态自检；按返回的失败/警告修正后重跑。它只做一次性打包，不会启动 watch 进程。
+4. **部署** — 调用 `obsidian_plugin_deploy` 装进测试库（TestVault）并写入启用列表；注意这一步只表示文件已写入、已启用，**不验证运行中的 Obsidian 是否真的加载了插件**（是否加载在后续阶段才有结论）。
+5. **校验** — 调用 `obsidian_plugin_validate` 检查结构与命名并运行 eslint；按返回错误修正后重跑，直到通过。
+6. **版本** — 发布时调用 `obsidian_plugin_version` 统一升级版本号。
+7. **提交** — 按「校验与提交」表格完成社区扫描与发布准备。
 
 ## 插件编写规范
 

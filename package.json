@@ -1,6 +1,6 @@
 {
   "name": "@leelee592/dsh-obsidian-plugin",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "packageManager": "pnpm@12.4.1",
   "description": "DeepSeek Harness tool plugin: scaffold, validate, and version Obsidian plugins.",
   "type": "module",
@@ -27,7 +27,8 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "deploy": "bash scripts/deploy.sh",
-    "prepublishOnly": "pnpm run build"
+    "prepublishOnly": "pnpm run build",
+    "test": "pnpm run build && node --test test/"
   },
   "publishConfig": {
     "access": "public"

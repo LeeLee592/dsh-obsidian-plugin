@@ -4,15 +4,17 @@
 
 ## Goal
 
-Let DeepSeek Harness (DSH) agents reliably scaffold, validate, and version-sync Obsidian plugins, with accompanying development-guideline knowledge (skill).
+Let DeepSeek Harness (DSH) agents reliably scaffold, build, deploy, validate, and version-sync Obsidian plugins, with accompanying development-guideline knowledge (skill).
 
 ## Architecture
 
 Two complementary, single-purpose parts:
 
 1. **Knowledge (skill)** — Obsidian plugin development guidelines (naming/submission rules, accessibility, code quality, submission & Scorecard). Derived from [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill), vendored into [assets/skills/obsidian-plugin](assets/skills/obsidian-plugin/SKILL.md) and registered as a runtime skill via `ctx.skills.register` in `apply()` (independent of project root).
-2. **Guardrails (tool bundle)** — this repo `@leelee592/dsh-obsidian-plugin` exposes 3 tools with typed schemas:
+2. **Guardrails (tool bundle)** — this repo `@leelee592/dsh-obsidian-plugin` exposes 5 tools with typed schemas:
    - `obsidian_plugin_scaffold` — generate a skeleton from the obsidian-sample-plugin template
+   - `obsidian_plugin_build` — bundle src/main.ts into a loadable main.js + static self-checks
+   - `obsidian_plugin_deploy` — install the built artifacts into a vault and enable the plugin id
    - `obsidian_plugin_validate` — structural validation + eslint-plugin-obsidianmd checks
    - `obsidian_plugin_version` — sync versions across three files
 
@@ -23,7 +25,7 @@ Two complementary, single-purpose parts:
         │ tool bundle             │ skill discovery
 ┌───────┴──────────────────────┐  ┌────────┴───────────────────┐
 │ @leelee592/dsh-obsidian-plugin │  │ obsidian-plugin skill       │
-│  scaffold/validate/version  │  │  SKILL.md + reference/*     │
+│  5 tools, scaffold…version  │  │  SKILL.md + reference/*     │
 └─────────────────────────────┘  └─────────────────────────────┘
 ```
 
@@ -36,8 +38,15 @@ Two complementary, single-purpose parts:
 ├── tsconfig.json         # tsc -> lib/
 ├── pnpm-lock.yaml        # pnpm lockfile
 ├── src/
-│   ├── index.ts          # tool plugin (3 tools)
+│   ├── index.ts          # apply(): tool registration, Config, template + skill wiring
+│   ├── fs.ts             # fs seam: path/target duality, sandboxPolicy, workspaceRoot
+│   ├── proc.ts           # spawnSync wrapper: timeout + outcome classification
+│   ├── naming.ts         # submission naming rules, placeholder rendering, semver
+│   ├── build.ts          # obsidian_plugin_build: three-tier degradation + static checks
+│   ├── deploy.ts         # obsidian_plugin_deploy: vault resolution, artifacts, binding
 │   └── bundle-doc.ts     # read bundled doc/ resources
+├── test/
+│   └── p0.test.ts        # node:test over lib/ (bare Node, no harness needed)
 ├── scripts/
 │   ├── link-dsh-deps.mjs # link $DSH_HOME @deepseek-ai types
 │   └── deploy.sh         # build + register tools + dump-config verify
@@ -72,3 +81,12 @@ Reusable rules:
 - **Naming/submission guardrails**: id must not contain `obsidian` or end with `plugin`; name must not contain `Obsidian` or end with `Plugin`; description ends with punctuation, ≤250 chars — enforced both in scaffold/validate code and in the skill docs.
 - **File I/O seam**: `inject: ["tools", "fs"]`; reads/writes go through `ctx.fs` (sandboxed), falling back to `node:fs` when `ctx.fs` is absent (bare-Node testing).
 - **Skill distribution**: ship skills under `assets/skills/` as package assets, and register them as runtime skills in `apply()` via `ctx.get("skills")?.register({...})` (body read from `new URL('../assets/skills/<name>/SKILL.md', import.meta.url)`).
+- **Two path identities, never mixed**: the backend's `FsTarget` is an opaque key for reads and sandboxed writes; the absolute OS path is what subprocesses (esbuild, external CLIs) can open. Passing a handle to a spawn or an OS path to a sandboxed write silently breaks the sandbox fence, so the fs seam must expose both explicitly.
+- **`workspaceRoot` belongs in every fs call**: `ctx.fs.resolve(path)` bases relative paths on the host's `process.cwd()`, not on the session workspace, and a bare-Node fallback has no notion of a workspace at all. Anchor every relative path to the session workspace inside the seam.
+- **Never spawn a watch command**: any command that can enter a watch/daemon mode (`pnpm run dev`, `esbuild --watch`) may never return. Prefer explicit one-shot arguments over the project's script, fall back to the project's *production* script only, and always enforce a hard timeout.
+- **Classify subprocess outcomes, don't trust exit status**: non-zero exit, missing executable, timeout, and "succeeded but printed nothing" are four different things with four different recoveries. Encode them in the runner's return value instead of inferring from `status`.
+- **Static analysis must not read as verification**: when a check only scans an artifact rather than running it, say so in the output. A bundle that was built successfully has not been loaded, and installed files are not a working plugin.
+- **Distinguish installed / enabled / active**: installation tools report every state separately and report unverifiable states as `unknown` rather than optimistically. Never let a user (or a model) infer "it works" from "the files are there".
+- **Resolve targets deterministically, then fail with options**: explicit argument → remembered binding → documented convention directory → refuse and list the choices. Do not create a target the user did not ask for, and do not guess among candidates.
+- **Tool `parameters` are a property map**: `{ name: { type, required?, description } }`, not a JSON Schema root. A JSON Schema root throws inside the tool API at load time and takes the whole plugin down — pin it with a test that registers every tool through the real validator.
+- **Report leftovers**: after installing files, list unexpected files in the target directory. A stale artifact from an earlier layout is a failure mode that only surfaces at runtime.

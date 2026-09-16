@@ -1,11 +1,19 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { existsSync, readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
-import { dirname, join, resolve } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import z from "@deepseek-ai/schemastery";
 import { defineTool } from "@deepseek-ai/dsh-tools";
 import { readBundleDoc } from "./bundle-doc.js";
+import { Fs, readAsset, type FsCall } from "./fs.js";
+import { buildPlugin } from "./build.js";
+import { deployPlugin } from "./deploy.js";
+import {
+  isSemver,
+  namingProblems,
+  render,
+  toClassName,
+  toPluginId,
+  type Vars,
+} from "./naming.js";
 
 // ---- plugin identity ------------------------------------------------------
 
@@ -15,6 +23,21 @@ export const inject = ["tools", "fs"];
 export const Config = z.object({
   defaultMinAppVersion: z.string().default("1.13.0"),
 });
+
+// Re-exported for consumers that imported these from the package root.
+export { Fs, type FsCall } from "./fs.js";
+export { namingProblems, render, toClassName, toPluginId, isSemver } from "./naming.js";
+export { buildPlugin, renderBuildReport, type BuildArgs, type BuildReport } from "./build.js";
+export {
+  BINDING_FILE,
+  DEFAULT_VAULT_DIR,
+  deployPlugin,
+  renderVaultReport,
+  resolveVault,
+  type Binding,
+  type DeployArgs,
+  type VaultReport,
+} from "./deploy.js";
 
 // ---- version notes / HARNESS context (external doc/ shipped with the package) ----
 
@@ -44,68 +67,11 @@ export function getVersionNotes(lang: "zh" | "en" = "zh"): string {
 }
 
 const HARNESS_FALLBACK =
-  "# HARNESS · 会话上下文\n你带「Obsidian 插件开发」能力：obsidian_plugin_scaffold / obsidian_plugin_validate / obsidian_plugin_version。";
+  "# HARNESS · 会话上下文\n你带「Obsidian 插件开发」能力：obsidian_plugin_scaffold / obsidian_plugin_build / obsidian_plugin_deploy / obsidian_plugin_validate / obsidian_plugin_version。";
 
 export const HARNESS_CONTEXT = readBundleDoc("harness.default.md", HARNESS_FALLBACK);
 
-// ---- filesystem seam ------------------------------------------------------
-// `ctx.fs` is injected by the harness (sandboxed/observable). It is optional so
-// the smoke tests can run in bare Node; in that case we fall back to node:fs.
-//
-// Every mutating call must carry the calling session's sandbox policy so the
-// `dsh-fs-sandbox` backend fences against the *session* workspace, not the
-// process-wide fallback root.
-
-export interface FsCall {
-  workspaceRoot?: string;
-  policy?: any;
-  signal?: AbortSignal;
-}
-
-export class Fs {
-  constructor(private fs?: any) {}
-  async resolve(path: string, workspaceRoot?: string): Promise<string> {
-    if (this.fs) {
-      const target = await this.fs.resolve(path, workspaceRoot === undefined ? undefined : { cwd: workspaceRoot });
-      return target.displayPath;
-    }
-    return resolve(workspaceRoot ?? process.cwd(), path);
-  }
-  async exists(path: string): Promise<boolean> {
-    if (this.fs) {
-      try {
-        const t = await this.fs.resolve(path);
-        return (await this.fs.stat(t)) !== undefined;
-      } catch {
-        return false;
-      }
-    }
-    return existsSync(path);
-  }
-  async readText(path: string): Promise<string> {
-    if (this.fs) return await this.fs.readText(await this.fs.resolve(path));
-    return readFile(path, "utf8");
-  }
-  async readJson(path: string): Promise<any | null> {
-    try {
-      return JSON.parse(await this.readText(path));
-    } catch {
-      return null;
-    }
-  }
-  async writeText(path: string, content: string, policy?: any, signal?: AbortSignal): Promise<void> {
-    if (this.fs) {
-      const target = await this.fs.resolve(path);
-      await this.fs.writeText(target, content, undefined, signal, policy);
-      return;
-    }
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, content, "utf8");
-  }
-}
-
 // ---- template files (vendored from obsidianmd/obsidian-sample-plugin) ----
-// Scaffold reads these from assets/templates/ and fills the {{...}} placeholders.
 
 const TEMPLATE_FILES = [
   ".editorconfig",
@@ -125,8 +91,7 @@ const TEMPLATE_FILES = [
 ];
 
 function readTemplate(fileName: string): string {
-  const url = new URL(`../assets/templates/${fileName}`, import.meta.url);
-  return readFileSync(url, "utf8").replace(/^\uFEFF/, "");
+  return readAsset(`../assets/templates/${fileName}`);
 }
 
 // ---- skill registration ---------------------------------------------------
@@ -135,8 +100,7 @@ function readTemplate(fileName: string): string {
 // project root.
 
 function readSkillFile(): string {
-  const url = new URL("../assets/skills/obsidian-plugin/SKILL.md", import.meta.url);
-  return readFileSync(url, "utf8").replace(/^\uFEFF/, "");
+  return readAsset("../assets/skills/obsidian-plugin/SKILL.md");
 }
 
 function skillDir(): string {
@@ -148,19 +112,19 @@ function parseSkill(md: string): { name: string; description: string; content: s
   if (!match) return { name: "obsidian-plugin", description: "", content: md };
   const front = match[1];
   const content = match[2].trimStart();
-  const name = (/^name:\s*(.+)$/m.exec(front) ?? [])[1]?.trim() ?? "obsidian-plugin";
+  const skillName = (/^name:\s*(.+)$/m.exec(front) ?? [])[1]?.trim() ?? "obsidian-plugin";
   const description = (/^description:\s*(.+)$/m.exec(front) ?? [])[1]?.trim() ?? "";
-  return { name, description, content };
+  return { name: skillName, description, content };
 }
 
 function registerSkill(ctx: any): void {
   const skills = ctx?.get?.("skills");
   if (typeof skills?.register !== "function") return;
   try {
-    const { name, description, content } = parseSkill(readSkillFile());
-    if (!name || !description) return;
+    const { name: skillName, description, content } = parseSkill(readSkillFile());
+    if (!skillName || !description) return;
     skills.register({
-      name,
+      name: skillName,
       description,
       content,
       source: "runtime",
@@ -171,65 +135,7 @@ function registerSkill(ctx: any): void {
   }
 }
 
-
-// ---- shared helpers -------------------------------------------------------
-
-interface Vars {
-  id: string;
-  name: string;
-  className: string;
-  description: string;
-  author: string;
-  authorUrl: string;
-  minAppVersion: string;
-  version: string;
-  year: string;
-}
-
-export function render(template: string, vars: Vars): string {
-  return template
-    .split("{{PLUGIN_ID}}").join(vars.id)
-    .split("{{PLUGIN_NAME}}").join(vars.name)
-    .split("{{PLUGIN_CLASS}}").join(vars.className)
-    .split("{{PLUGIN_DESCRIPTION}}").join(vars.description)
-    .split("{{PLUGIN_AUTHOR}}").join(vars.author)
-    .split("{{AUTHOR_URL}}").join(vars.authorUrl)
-    .split("{{MIN_APP_VERSION}}").join(vars.minAppVersion)
-    .split("{{PLUGIN_VERSION}}").join(vars.version)
-    .split("{{YEAR}}").join(vars.year);
-}
-
-export function toClassName(name: string): string {
-  return name
-    .split(/[\s-_]+/)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join("");
-}
-
-export function toPluginId(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-const SEMVER = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
-
-export function namingProblems(id: string, name: string, description: string): string[] {
-  const errors: string[] = [];
-  if (/obsidian/i.test(id)) errors.push('id cannot contain "obsidian"');
-  if (/plugin$/i.test(id)) errors.push('id cannot end with "plugin"');
-  if (!/^[a-z0-9_-]+$/.test(id)) errors.push("id must only contain lowercase letters, numbers, dashes, underscores");
-  if (/obsidian/i.test(name)) errors.push('name cannot contain "Obsidian"');
-  if (/plugin$/i.test(name)) errors.push('name cannot end with "Plugin"');
-  if (/^obsi/i.test(name) || /dian$/i.test(name)) errors.push('name cannot start with "Obsi" or end with "dian"');
-  if (/obsidian/i.test(description)) errors.push('description cannot include "Obsidian"');
-  if (/this plugin|this is a plugin|this plugin allows/i.test(description)) errors.push('description cannot use "This plugin" phrases');
-  if (!/[.?!)]$/.test(description)) errors.push("description must end with punctuation . ? ! or )");
-  return errors;
-}
-
-// ---- tool bodies ----------------------------------------------------------
+// ---- existing tool bodies -------------------------------------------------
 
 interface ScaffoldArgs {
   targetDir: string;
@@ -255,7 +161,7 @@ export async function scaffold(fs: Fs, args: ScaffoldArgs, call: FsCall = {}): P
     version: args.version || "0.1.0",
     year: String(new Date().getFullYear()),
   };
-  if (!SEMVER.test(vars.version)) return `Error: version "${vars.version}" is not semver`;
+  if (!isSemver(vars.version)) return `Error: version "${vars.version}" is not semver`;
 
   const naming = namingProblems(vars.id, vars.name, vars.description);
   if (naming.length) return "Error: metadata violates submission rules:\n- " + naming.join("\n- ");
@@ -296,7 +202,7 @@ export async function validateProject(fs: Fs, args: { projectDir: string }, call
     problems.push(...naming.map((e) => `manifest.json: ${e}`));
     if (manifest.description.length > 250) warnings.push(`description is ${manifest.description.length} chars (recommended ≤ 250)`);
   }
-  if (manifest.version && !SEMVER.test(manifest.version)) problems.push(`manifest.json: version "${manifest.version}" is not semver`);
+  if (manifest.version && !isSemver(manifest.version)) problems.push(`manifest.json: version "${manifest.version}" is not semver`);
 
   const versions = await fs.readJson(join(dir, "versions.json"));
   if (!versions || typeof versions !== "object" || Array.isArray(versions)) {
@@ -312,12 +218,14 @@ export async function validateProject(fs: Fs, args: { projectDir: string }, call
   // eslint-plugin-obsidianmd 检查（借用项目自身的 eslint 环境）
   const eslintBin = join(dir, "node_modules", ".bin", "eslint");
   if (await fs.exists(eslintBin)) {
-    const result = spawnSync(eslintBin, ["."], { cwd: dir, encoding: "utf8" });
-    if (result.error) {
-      warnings.push(`eslint could not run: ${result.error.message}`);
-    } else if (result.status !== 0) {
-      const output = (result.stdout || "").trim() || (result.stderr || "").trim();
-      problems.push(`eslint (eslint-plugin-obsidianmd):\n${output}`);
+    const { run } = await import("./proc.js");
+    const result = run({ command: eslintBin, args: ["."], cwd: dir, timeoutMs: 180_000 });
+    if (result.reason === "spawn-error") {
+      warnings.push(`eslint could not run: ${result.errorMessage ?? "unknown error"}`);
+    } else if (result.reason === "timeout") {
+      warnings.push("eslint timed out after 180s — skipped");
+    } else if (!result.ok) {
+      problems.push(`eslint (eslint-plugin-obsidianmd):\n${result.output}`);
     }
   } else {
     warnings.push("eslint not available — run `pnpm install` in the plugin project first to enable eslint-plugin-obsidianmd checks");
@@ -332,7 +240,7 @@ export async function validateProject(fs: Fs, args: { projectDir: string }, call
 
 export async function bumpVersion(fs: Fs, args: { projectDir: string; version: string; minAppVersion?: string }, call: FsCall = {}): Promise<string> {
   const dir = await fs.resolve(args.projectDir, call.workspaceRoot);
-  if (!SEMVER.test(args.version)) return `Error: version "${args.version}" is not semver`;
+  if (!isSemver(args.version)) return `Error: version "${args.version}" is not semver`;
 
   const manifestPath = join(dir, "manifest.json");
   const versionsPath = join(dir, "versions.json");
@@ -403,6 +311,32 @@ export function apply(ctx: any, config: any) {
     output: textOutput,
     async execute(args: any, exec: any) {
       return scaffold(fs, { ...args, minAppVersion: args.minAppVersion ?? cfg.defaultMinAppVersion }, makeCall(exec));
+    },
+  }));
+
+  ctx.tools.register(defineTool({
+    name: "obsidian_plugin_build",
+    description: "Bundle an Obsidian plugin project into a loadable main.js (CommonJS, obsidian externalized) and run static self-checks: artifact presence, module format and export, manifest/versions/package version consistency. Use it after editing src/ and before deploying. It performs one-shot builds only — never a watch process.",
+    parameters: {
+      projectDir: { type: "string", required: true, description: "Plugin project directory (absolute or workspace-relative)." },
+      production: { type: "boolean", description: "Report the build as production (default true). Note: when the project has its own esbuild.config.mjs, the project's own flags decide the actual output, so this is a reporting hint rather than a guarantee." },
+    },
+    output: textOutput,
+    async execute(args: any, exec: any) {
+      return buildPlugin(fs, args, makeCall(exec));
+    },
+  }));
+
+  ctx.tools.register(defineTool({
+    name: "obsidian_plugin_deploy",
+    description: "Install built artifacts (main.js, manifest.json, styles.css) into a vault's .obsidian/plugins/<id>/ and add the id to that vault's community-plugins.json, then remember the vault in dsh.obsidian.json. Reports the three states separately: files written, enabled in the vault list, and whether the running app actually loaded it (loading is verified in a later phase).",
+    parameters: {
+      projectDir: { type: "string", required: true, description: "Plugin project directory (absolute or workspace-relative)." },
+      vault: { type: "string", description: "Target vault directory. Omit to reuse the dsh.obsidian.json binding, then the TestVault/ convention next to the project." },
+    },
+    output: textOutput,
+    async execute(args: any, exec: any) {
+      return deployPlugin(fs, args, makeCall(exec));
     },
   }));
 
