@@ -6,10 +6,12 @@ import { readBundleDoc } from "./bundle-doc.js";
 import { Fs, readAsset, type FsCall } from "./fs.js";
 import { buildPlugin } from "./build.js";
 import { deployPlugin } from "./deploy.js";
+import { resolveArtifact } from "./lookup.js";
 import { inspect } from "./inspect.js";
 import { vaultAction } from "./vault.js";
 import { reloadPlugin } from "./reload.js";
 import { testPlugin } from "./harness.js";
+import { e2eAction } from "./e2e.js";
 import {
   isSemver,
   namingProblems,
@@ -47,6 +49,7 @@ export { inspect, truncate, type InspectAction, type InspectArgs } from "./inspe
 export { vaultAction, registryPath, readRegistry, type VaultAction, type VaultArgs } from "./vault.js";
 export { reloadPlugin, type ReloadAction, type ReloadArgs } from "./reload.js";
 export { testPlugin, parseHarnessOutput, renderSmokeReport, type TestArgs } from "./harness.js";
+export { e2eAction, renderTemplate, pluginDirFor, type E2eAction, type E2eArgs } from "./e2e.js";
 
 // ---- version notes / HARNESS context (external doc/ shipped with the package) ----
 
@@ -424,6 +427,26 @@ export function apply(ctx: any, config: any) {
     output: textOutput,
     async execute(args: any, exec: any) {
       return testPlugin(fs, args, makeCall(exec));
+    },
+  }));
+
+  ctx.tools.register(defineTool({
+    name: "obsidian_plugin_e2e",
+    description: "Scaffold sandboxed end-to-end tests (L4) — the verification tier that does NOT touch your Obsidian. It generates a WebdriverIO + wdio-obsidian-service setup that launches its own Obsidian with an isolated config directory and a copy of the vault, so nothing switches your window or steals focus. Use it to remove the window-switching that live CLI checks cause. It scaffolds and reports; it never runs the suite for you (run `pnpm run e2e`).",
+    parameters: {
+      action: { type: "string", required: true, description: "init (write the scaffold) | status (report what exists, what is missing)" },
+      projectDir: { type: "string", required: true, description: "Plugin project directory (absolute or workspace-relative)." },
+      dir: { type: "string", description: "Scaffold directory inside the project (default 'e2e')." },
+      force: { type: "boolean", description: "Overwrite generated files that already exist (default false)." },
+    },
+    output: textOutput,
+    async execute(args: any, exec: any) {
+      const call = makeCall(exec);
+      const projectDir = await fs.resolve(args.projectDir, call.workspaceRoot);
+      const manifest = await fs.readJson(join(projectDir, "manifest.json"));
+      // Point the sandbox at wherever this project actually builds.
+      const artifact = await resolveArtifact(fs, projectDir, { pluginId: manifest?.id });
+      return e2eAction(fs, args, call, artifact.ok ? artifact.resolution.dir : undefined);
     },
   }));
 
