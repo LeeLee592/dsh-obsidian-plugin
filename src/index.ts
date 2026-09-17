@@ -327,6 +327,8 @@ export function apply(ctx: any, config: any) {
     parameters: {
       projectDir: { type: "string", required: true, description: "Plugin project directory (absolute or workspace-relative)." },
       production: { type: "boolean", description: "Report the build as production (default true). Note: when the project has its own esbuild.config.mjs, the project's own flags decide the actual output, so this is a reporting hint rather than a guarantee." },
+      entry: { type: "string", description: "Explicit entry file (e.g. 'main.ts' or 'src/plugin/main.ts'). Omit to auto-detect: src/main.ts, root main.ts, the project's bundler config, then package.json main." },
+      outDir: { type: "string", description: "Explicit directory holding the built main.js. Omit to auto-detect: project root, the bundler config's output, .obsidian/plugins/<id>/, then a bounded search." },
     },
     output: textOutput,
     async execute(args: any, exec: any) {

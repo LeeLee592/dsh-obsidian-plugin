@@ -14,9 +14,10 @@
 //     not a load test, and the output must not imply otherwise.
 
 import { Buffer } from "node:buffer";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { builtinModules } from "node:module";
 import { isSemver, namingProblems } from "./naming.js";
+import { readConfigs, renderLookupFailure, resolveArtifact, resolveEntry } from "./lookup.js";
 import { run, type RunResult } from "./proc.js";
 import type { Fs, FsCall } from "./fs.js";
 
@@ -49,6 +50,10 @@ export interface BuildArgs {
   projectDir: string;
   /** Defaults to true. Dev builds add an inline sourcemap. */
   production?: boolean;
+  /** Explicit entry file, overriding the resolution chain. */
+  entry?: string;
+  /** Explicit output directory for main.js, overriding artifact discovery. */
+  outDir?: string;
 }
 
 export interface BuildReport {
@@ -58,13 +63,38 @@ export interface BuildReport {
   version?: string;
   tier?: string;
   outputBytes?: number;
+  /** Entry file that was built, relative to the project. */
+  entryPath?: string;
+  entrySource?: string;
+  /** main.js location, relative to the project. */
+  artifactPath?: string;
+  artifactSource?: string;
   failures: string[];
   warnings: string[];
 }
 
-const TIER_L1 = "project-local esbuild";
-const TIER_L2 = "project build script (production)";
-const TIER_L3 = "none";
+/**
+ * Tiers, in evaluation order. The project's own build script comes FIRST
+ * whenever the project has a bundler config, because that config may rely on
+ * plugins we cannot supply from the command line — obsidian-tasks needs
+ * esbuild-svelte/esbuild-sass-plugin for `.svelte`/`.scss` inputs, and invoking
+ * esbuild directly fails on it with "No loader is configured for .svelte".
+ */
+const TIER_SCRIPT = "project build script (production)";
+const TIER_DIRECT = "project-local esbuild (direct)";
+const TIER_NONE = "none";
+
+/** Config files that carry bundler plugins, making the project script authoritative. */
+const BUNDLER_CONFIGS = [
+  "esbuild.config.mjs",
+  "esbuild.config.js",
+  "esbuild.config.ts",
+  "rollup.config.js",
+  "rollup.config.mjs",
+  "rollup.config.ts",
+  "vite.config.ts",
+  "vite.config.js",
+];
 
 /** Render the report the model sees. Plain text, short, always ends with a next step. */
 export function renderBuildReport(report: BuildReport, text = ""): string {
@@ -75,7 +105,9 @@ export function renderBuildReport(report: BuildReport, text = ""): string {
   }
   const kb = ((report.outputBytes ?? 0) / 1024).toFixed(1);
   const lines = [
-    `Built ${report.pluginId} ${report.version} → main.js (${kb} KB) via ${report.tier}`,
+    `Built ${report.pluginId} ${report.version} → ${report.artifactPath ?? "main.js"} (${kb} KB) via ${report.tier}`,
+    `  entry:    ${report.entryPath ?? "src/main.ts"} (${report.entrySource ?? "default"})`,
+    `  artifact: ${report.artifactPath ?? "main.js"} (${report.artifactSource ?? "project root"})`,
     `Checks: ${report.warnings.length === 0 ? "all passed" : `${report.warnings.length} warning(s)`}`,
   ];
   for (const w of report.warnings) lines.push(`  ! ${w}`);
@@ -98,42 +130,63 @@ export async function buildPlugin(fs: Fs, args: BuildArgs, call: FsCall = {}): P
   report.pluginId = manifest.id;
   report.version = manifest.version;
 
-  const entry = join(projectDir, "src", "main.ts");
-  if (!(await fs.exists(entry))) {
-    report.failures.push(`entry point not found: ${join(args.projectDir, "src", "main.ts")} — expected a TypeScript plugin at src/main.ts`);
+  // Entry point: resolved from the project's own configuration, because real
+  // plugins use `src/main.ts`, a repository-root `main.ts`, or something like
+  // `src/plugin/main.ts` (DESIGN.md §2.8).
+  const entryLookup = await resolveEntry(fs, projectDir, { entry: args.entry });
+  if (!entryLookup.ok) {
+    report.failures.push(
+      renderLookupFailure("entry", { ...entryLookup.failure, projectDir }).replace(/^Error: /, "Error: entry point not found — "),
+    );
     return renderBuildReport(report);
   }
+  const entry = entryLookup.resolution.path;
+  report.entryPath = entryLookup.resolution.displayPath;
+  report.entrySource = entryLookup.resolution.source;
 
   const production = args.production !== false;
   const bin = join(projectDir, "node_modules", ".bin", "esbuild");
+  const pkg = await fs.readJson(join(projectDir, "package.json"));
+  const buildScript = typeof pkg?.scripts?.build === "string" ? pkg.scripts.build : undefined;
+  const hasBundlerConfig = (await readConfigs(fs, projectDir)).size > 0;
+  const hasEsbuild = await fs.exists(bin);
 
   let result: RunResult | undefined;
 
-  if (await fs.exists(bin)) {
-    report.tier = TIER_L1;
+  if (buildScript && production) {
+    // Deliberately the *production* script only: `dev` enters watch mode and
+    // never exits (float-mark's config calls context.watch()).
+    report.tier = TIER_SCRIPT;
+    const pm = (await fs.exists(join(projectDir, "pnpm-lock.yaml"))) ? "pnpm" : "npm";
+    result = run({ command: pm, args: ["run", "build"], cwd: projectDir, timeoutMs: 300_000 });
+  } else if (hasEsbuild && !hasBundlerConfig) {
+    // No project config to honour, so our own flags are the whole truth.
+    report.tier = TIER_DIRECT;
     result = run({
       command: bin,
-      args: buildArgs(production),
+      args: buildArgs(production, entryLookup.resolution.displayPath),
       cwd: projectDir,
       timeoutMs: 180_000,
     });
+  } else if (hasEsbuild && hasBundlerConfig && !production) {
+    report.tier = TIER_DIRECT;
+    result = run({
+      command: bin,
+      args: buildArgs(production, entryLookup.resolution.displayPath),
+      cwd: projectDir,
+      timeoutMs: 180_000,
+    });
+    report.warnings.push(
+      "built with our own esbuild flags because production=false; the project's bundler plugins were NOT applied",
+    );
   } else {
-    const pkg = await fs.readJson(join(projectDir, "package.json"));
-    const hasBuildScript = typeof pkg?.scripts?.build === "string";
-    if (hasBuildScript && production) {
-      // L2 deliberately restricted to the production script: `dev` starts a
-      // watcher that never exits.
-      report.tier = TIER_L2;
-      const pm = (await fs.exists(join(projectDir, "pnpm-lock.yaml"))) ? "pnpm" : "npm";
-      result = run({ command: pm, args: ["run", "build"], cwd: projectDir, timeoutMs: 300_000 });
-    } else {
-      report.tier = TIER_L3;
-      report.failures.push(
-        "no local esbuild and no usable build script: run `pnpm install` in the plugin project, " +
-        "or add a `build` script that produces main.js in production mode",
-      );
-      return renderBuildReport(report);
-    }
+    report.tier = TIER_NONE;
+    report.failures.push(
+      hasBundlerConfig
+        ? "the project has a bundler config but no usable `build` script: add one that builds in production mode (we deliberately never run `dev`, which watches forever)"
+        : "no local esbuild and no usable build script: run `pnpm install` in the plugin project, or add a `build` script",
+    );
+    return renderBuildReport(report);
   }
 
   if (!result.ok) {
@@ -142,10 +195,28 @@ export async function buildPlugin(fs: Fs, args: BuildArgs, call: FsCall = {}): P
     return renderBuildReport(report, `Build failed via ${report.tier}.`);
   }
 
-  const mainJs = join(projectDir, "main.js");
-  if (!(await fs.exists(mainJs))) {
-    report.failures.push(`esbuild reported success but ${join(args.projectDir, "main.js")} does not exist — the bundler output path differs from the Obsidian convention`);
+  // Artifact: also discovered, because a real project may build into `dir: '.'`
+  // or straight into its own test vault (obsidian-tasks, dataview,
+  // editing-toolbar — see DESIGN.md §2.8).
+  const artifactLookup = args.outDir
+    ? await resolveArtifact(fs, await fs.resolve(args.outDir, call.workspaceRoot), { pluginId: manifest.id })
+    : await resolveArtifact(fs, projectDir, { pluginId: manifest.id });
+  if (!artifactLookup.ok) {
+    report.failures.push(
+      [
+        `${report.tier} reported success but no main.js could be located.`,
+        "Tried:",
+        ...artifactLookup.tried.map((t) => `  - ${t}`),
+        'Pass outDir="<dir>" explicitly, or make the build write main.js into the project root.',
+      ].join("\n"),
+    );
     return renderBuildReport(report, `Build failed via ${report.tier}.`);
+  }
+  const mainJs = artifactLookup.resolution.path;
+  report.artifactPath = join(relative(projectDir, artifactLookup.resolution.dir) || ".", "main.js");
+  report.artifactSource = artifactLookup.resolution.source;
+  if (artifactLookup.resolution.source === "search") {
+    report.warnings.push(`main.js was found by search at ${report.artifactPath} — pass outDir to skip the search`);
   }
 
   const bundle = await fs.readText(mainJs);
@@ -172,7 +243,6 @@ export async function buildPlugin(fs: Fs, args: BuildArgs, call: FsCall = {}): P
   if (versions && typeof versions === "object" && manifest.version && versions[manifest.version] === undefined) {
     report.warnings.push(`versions.json has no entry for ${manifest.version} — run obsidian_plugin_validate before releasing`);
   }
-  const pkg = await fs.readJson(join(projectDir, "package.json"));
   if (pkg && manifest.version && pkg.version !== manifest.version) {
     report.warnings.push(`package.json version "${pkg.version}" != manifest.json "${manifest.version}"`);
   }
@@ -188,9 +258,9 @@ export async function buildPlugin(fs: Fs, args: BuildArgs, call: FsCall = {}): P
 }
 
 /** The esbuild argv used for tier L1 — mirrors the official sample-plugin config. */
-export function buildArgs(production: boolean): string[] {
+export function buildArgs(production: boolean, entry = "src/main.ts"): string[] {
   return [
-    "src/main.ts",
+    entry,
     "--bundle",
     ...EXTERNAL.map((name) => `--external:${name}`),
     "--format=cjs",
