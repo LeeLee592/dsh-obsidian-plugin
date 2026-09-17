@@ -144,7 +144,7 @@ DSH 在 macOS 用 `sandbox-exec` + SBPL 限制，profile 形如（见 `dsh-sandb
 | **附加调试器后 `plugin:reload` 挂死** | `dev:debug on` 与其它命令冲突（本次复现 2 次；`dev:debug off` 后立即恢复） | 「读 console」必须在**独立窗口期**进行：attach → 读 → **立即 detach**，期间不跑 reload |
 | 命令静默超时（空输出） | IPC 卡顿 | 重试（1～2 次）；连续失败则判「App 无响应」并给出重启/重注册指引 |
 | `vault-open` 后立刻查 DOM 得到空 | 窗口异步渲染 | 轮询等待（带上限） |
-| 目标库不在前台 → `Command/Plugin "x" not found` | 命令面按**活动窗口**解析 | 先 `vault-open` 把目标库带到前台，并在同一次读数里自证身份（见 §7.5） |
+| 目标库不在前台 → `Command/Plugin "x" not found` | 命令面按**活动窗口**解析 | 先 `vault-open` 把目标库带到前台，并在同一次读数里自证身份（见 §7 第 5 条） |
 | 端口/焦点被抢 | App 自身行为 | 提前告知用户；测试完可关闭窗口 |
 
 ### 2.7 复核修订记录（本版相对上一版的更正）
@@ -157,7 +157,68 @@ DSH 在 macOS 用 `sandbox-exec` + SBPL 限制，profile 形如（见 `dsh-sandb
 | 信任弹窗会关闭**全局**受限模式 | 受限模式是**每库 × 每 App 实例**（localStorage `enable-plugin-<appId>`） | app.js 的 `setEnable`/`isEnabled` 实现 + 实盘 localStorage 键 |
 | CLI 完成 enable 的跨库操作已实测 | 该输出的**目标库未确证**，降级为「部分验证」 | 目标库 `community-plugins.json` 的 mtime 晚于部署两天 |
 | 文档同步清单使用 `README{,.en}.md` 等旧名 | 仓库已改为 `README.md` / `README.zh.md`（英文默认）+ `README.i18n.yaml` | 仓库现行文件 |
-| 缺失 | **新增 §7.5「观测必须自证身份」**：读窗口级数据时须在同一次读数里返回 `app.vault.getName()` | 复核中曾误把用户真实库的插件列表当作 TestVault 的数据，根因是仅凭「CLI 报告的活动库」推断目标 |
+| 缺失 | **新增 §7 第 5 条「观测必须自证身份」**：读窗口级数据时须在同一次读数里返回 `app.vault.getName()` | 复核中曾误把用户真实库的插件列表当作 TestVault 的数据，根因是仅凭「CLI 报告的活动库」推断目标 |
+| 「三档验证」中 L3 是唯一的真机档 | **改为四档**：L3（用户实例，会抢焦点）+ **L4（沙箱实例，零干扰，新增为默认档）** | 真实使用反馈：CLI 操作 TestVault 频繁切换用户窗口、抢占鼠标焦点（§2.9） |
+| 入口固定 `src/main.ts`、产物固定项目根 | **两者都改为解析链** | 11 个头部插件抽样：入口有 3 种形态（含根 `main.ts`），产物有 3 种落点（含测试库内）；editing-toolbar 用原实现直接构建失败（§2.8） |
+| 离线冒烟只需桩 `obsidian` | **顺序有依赖**：宿主环境 → 桩 → 项目真实 `@codemirror/*` → 产物；且需 project jsdom 与宿主全局 | 真实插件探针：`self is not defined` / `StateEffect.define is not a function` / `moment.locale is not a function`（§2.8） |
+
+### 2.8 真实插件抽样：插件开发场景与注意事项
+
+**抽样范围**：官方索引 `obsidianmd/obsidian-releases` 的 `community-plugins.json`（**7722 个插件**）中选取 11 个跨类别头部插件（dataview / Templater / obsidian-tasks / kanban / calendar / excalidraw / obsidian-git / recent-files / minimal-settings / style-settings / cmdr），逐个读取其构建配置、入口、产物落点与测试基建。
+
+**构建与产物形态的真实分布**
+
+| 维度 | 分布 |
+|---|---|
+| 构建器 | esbuild 7 · rollup 3 · 其他 1 |
+| 入口 | `src/main.ts`（多数）· **仓库根 `main.ts`**（obsidian-tasks、recent-files）· `src/plugin/main.ts`（editing-toolbar） |
+| 产物落点 | 项目根 `main.js`（多数）· `dir: '.'`（obsidian-tasks、kanban）· **直接输出进各自的测试库**（dataview → `test-vault/`，editing-toolbar → `Editing-Toolbar-Test-Vault/`） |
+| 测试基建 | 两极分化：obsidian-tasks 177 个测试、dataview 18 个、obsidian-git/cmdr/style-settings 用 vitest；**其余多为 0** |
+| 宿主环境 | jest+jsdom（dataview、obsidian-tasks）、vitest jsdom（cmdr）、vitest node（obsidian-git）、**wdio-obsidian-service（Templater）** |
+
+**这些真实形态直接否定掉我们原有的两个假设**：
+
+1. **入口不能硬编码 `src/main.ts`**——已实测：用我们的 `build` 构建 editing-toolbar 直接报 `entry point not found`（它的入口是 `src/plugin/main.ts`）。
+2. **产物不一定在项目根**——dataview 与 editing-toolbar 都把产物写进各自的测试库，我们的产物发现逻辑必须解析项目的构建配置，而不是假定路径。
+
+**必做注意项（多为实测所得，按优先级）**：
+
+| # | 注意项 | 证据 | 对策 |
+|---|---|---|---|
+| 1 | Obsidian 只在库加载时扫一次插件目录 | P1 实测 `Plugin "x" not found` | `reload action=rescan`（已实现） |
+| 2 | 受限模式逐库阻止加载 | P1 实测 `not enabled` | 显式 `unrestrict`（已实现） |
+| 3 | **`@codemirror/*`、`@lezer/*` 不能用桩替代** | 桩化后 `StateEffect.define is not a function` | 离线冒烟必须用**项目自己的真实依赖** |
+| 4 | **DOM 宿主是刚需**（多数插件加载期即访问 document） | `self is not defined`；dataview/cmdr 均以 jsdom 为宿主 | 允许项目自带的 jsdom；缺失时明确报出 |
+| 5 | **Obsidian 注入的全局**（`moment` 等） | editing-toolbar 报 `e.moment.locale is not a function` | 桩补齐宿主全局 |
+| 6 | 产物导出形态不一（`.default` vs 直接导出） | rollup `exports: "default"` vs esbuild 默认 | 冒烟同时接受两种 |
+| 7 | 未实现的 API 必须显式报错 | 否则排障成本极高 | 桩抛 `Not implemented in the offline stub: <name>` |
+| 8 | 部分插件访问未公开内部 API | obsidian-tasks 使用社区维护的 `obsidian-typings` | 不在工具层做限制，但文档需说明其风险 |
+
+### 2.9 真机验证的可用性缺陷：抢焦点（新增，来自真实使用反馈）
+
+**问题**：DSH 在用本插件开发时，调用 CLI 对 TestVault 做操作会**频繁切换窗口、夺走用户的鼠标焦点**。根因是 P1 的机制本身：`plugin:*` / `dev:*` / `eval` 按**活动窗口**解析，所以每次观测前都要把测试库带到前台（`vault-open`），而 `dev:screenshot` 等又依赖目标窗口在前台。
+
+**这不是小毛病**：用户的窗口被反复切走 → 无法在开发期间做别的事；在 macOS 上还会连带切换 Space/应用焦点。P1 的 `ensure confirm=true` 只做到了「显式且在预期内」，**没有消除代价**。
+
+**解法方向：沙箱化实例**。社区已有成熟方案 **`obsidian-launcher`**（v3.2.0），其 README 的原文能力声明正好命中我们的痛点：
+
+> *"download and launch different versions of Obsidian, install plugins and themes into Obsidian vaults, and launch **sandboxed Obsidian instances with isolated user configuration directories**"* —— 并明确说明 *"so you don't need to worry about it interfering with your system Obsidian installation"*，且可**并行启动多个版本**。
+
+它还提供了几项我们正需要的能力：
+
+- `copy: true` —— **打开库的副本**，测试过程不改动原库；
+- `plugins: [...]` —— 按路径安装**本地插件**、按 id 安装**社区插件**；
+- `appVersion: "earliest"` —— **自动取插件 `manifest.json` 里的 `minAppVersion`** 作为测试版本，直接对我们的 A12（多版本兼容）给出实证；
+- 区分 `appVersion` 与 `installerVersion`，可在不同 Electron 基座上也验证一遍。
+
+`wdio-obsidian-service`（v3.2.0）在它之上提供 WebdriverIO 服务：多版本、沙箱隔离、库切换、CI。
+
+**关键判断**：沙箱实例拥有**独立的用户配置目录**（受限模式、库注册表、其它插件都干净，不受用户配置影响），打开的是**库副本**，并且**永远不需要用户窗口进入前台**。因此它把「减少抢焦点」从「优化」变成「从根上消除」——用户的 Obsidian 可以一直保持不动。
+
+**因此真机验证分裂为两档**（详见 §3.3）：
+
+- **L3 用户实例**：验证「插件的**真实使用环境**」（用户自己的库/窗口/配置），代价是抢焦点，须显式确认、少用；
+- **L4 沙箱实例**：验证「插件在**真实 Obsidian 运行时**中的行为」，**零干扰**，可反复、可并行、可多版本，适合日常循环与 CI。
 
 ---
 
@@ -169,43 +230,49 @@ DSH 在 macOS 用 `sandbox-exec` + SBPL 限制，profile 形如（见 `dsh-sandb
 ┌──────────────────────────────────────────────────────────────────────────┐
 │ DSH Host（tools / fs / skill / bash / subprocess）                        │
 └──────▲───────────────────────────────────────────────────────────────────┘
-       │ 10 个工具
+       │ 11 个工具（已实现 8）
 ┌──────┴───────────────────────────────────────────────────────────────────┐
 │ @leelee592/dsh-obsidian-plugin                                            │
-│  【接口层】 scaffold · validate · version            （既有，行为不变）    │
-│            build · deploy · test · inspect · eval · reload · vault（新）  │
+│  【接口层】 scaffold · build · deploy · inspect · vault · reload ·        │
+│            validate · version                       （已实现）            │
+│            test · e2e · eval                        （P2 / P3）           │
 │  【能力层】 buildRunner │ vaultDeployer │ smokeHarness │ obsidianBridge    │
-│  【底座层】 ctx.fs（受沙箱） · spawnSync（CLI/esbuild，不受沙箱）          │
+│            e2eScaffolder（生成 wdio 骨架；依赖留给用户项目）              │
+│  【底座层】 ctx.fs（受沙箱） · spawnSync（CLI/esbuild/wdio，不受沙箱）    │
 └──────────────────────────────────────────────────────────────────────────┘
        │ 写 .obsidian/plugins/<id>/                 │ CLI（IPC）+ eval（内部通道）
        ▼                                            ▼
 ┌──────────────────────────────┐        ┌──────────────────────────────────┐
-│ TestVault（工作区内，默认目标）│◄──────│ Obsidian App（运行中）            │
-│ · .obsidian/plugins/<id>/    │ reload │ · 插件实例/命令/视图              │
-│ · .obsidian/community-plugins│        │ · console/errors/DOM/截图         │
-└──────────────────────────────┘        └──────────────────────────────────┘
+│ TestVault（工作区内，默认目标）│        │ L3 用户 Obsidian（会抢焦点）      │
+│ · .obsidian/plugins/<id>/    │        │ L4 沙箱实例（独立 userData，零干扰）│
+│ · .obsidian/community-plugins│        │ · 插件实例/命令/视图              │
+└──────────────────────────────┘        │ · console/errors/DOM/截图         │
+                                        └──────────────────────────────────┘
 ```
 
 ### 3.2 约束层级（设计必须按这个顺序退让）
 
 ```
 ① 用户的安全决定（是否信任仓库 / 是否退出受限模式）   ← 永不由 agent 代做
-② 用户的工作环境（不擅自切走用户的库/窗口，除非已确认）
+② 用户的工作环境（不切走用户的窗口、不抢焦点）          ← 由 L4 沙箱实例从根上消解，而非「尽量减少」
 ③ 可靠性（挂死、时序、窗口归属都要有降级路径）
 ④ 能力覆盖（尽可能多自动化）                          ← 最后才牺牲
 ```
 
-### 3.3 三档验证深度
+### 3.3 四档验证深度
 
-| 档 | 手段 | 覆盖 | 前置 | 工具 |
-|---|---|---|---|---|
-| **L1 静态** | 产物存在性、CJS/导出/external 检查、manifest↔产物一致性 | 结构错误、忘构建、版本漂移、obsidian 被打包 | 无 | `build` 的返回段 |
-| **L2 离线冒烟** | Node 内 `Module._load` 拦截 `obsidian` 桩，真跑 `onload()`/`onunload()` | 加载崩溃、注册缺失、清理泄漏、`minAppVersion` | Node | `test` |
-| **L3 真机** | `vault-open` + `plugin:enable` + `plugin:reload` + `dev:*` + `eval` | 真实行为：UI、交互、真实 vault、异步错误 | Obsidian + CLI | `vault` / `reload` / `inspect` / `eval` |
+| 档 | 手段 | 覆盖 | 前置 | 干扰 | 工具 |
+|---|---|---|---|---|---|
+| **L1 静态** | 产物存在性、CJS/导出/external 检查、manifest↔产物一致性 | 结构错误、忘构建、版本漂移、obsidian 被打包 | 无 | 无 | `build` 的返回段 |
+| **L2 离线冒烟** | Node 内 `Module._load` 拦截 `obsidian` 桩 + 项目真实 `@codemirror/*`、可选的 project jsdom，真跑 `onload()`/`onunload()` | 加载崩溃、注册缺失、清理泄漏、`minAppVersion` | Node | 无 | `test` |
+| **L3 用户实例** | `vault-open` + `plugin:enable` + `plugin:reload` + `dev:*` + `eval`，作用于**用户自己的 Obsidian** | 插件的**真实使用环境**：用户真实的库、配置、其它插件共存 | 用户 App 在运行 + CLI | **抢焦点、切窗口** | `vault` / `reload` / `inspect` / `eval` |
+| **L4 沙箱实例** ✨ | 下载并启动**独立的 Obsidian 实例**（独立 userData + CDP 驱动），在其中装插件、跑断言 | 真实运行时行为，且**可反复、可并行、可多版本**（可测 `minAppVersion` 兼容性） | 能下载 Electron/Obsidian | **零干扰**（用户窗口始终不动） | `e2e`（脚手架）+ 项目自建的 wdio 套件 |
 
-L1/L2 在**任何环境**都能跑；L3 不可用时降级为 L1+L2 并**明确标注结论的可信度边界**。
+**为什么 L4 是必要的，而不是可选优化**：L3 的代价是**用户的注意力**——实测中每次观测都要把测试库带到前台，用户在开发期间无法做别的事。L4 用「独立实例 + 独立 userData」把这个代价直接从架构上消除，因此**日常循环默认走 L4**，L3 只在「必须验证用户真实环境」时使用。
 
-### 3.4 工具集合（3 → 10）
+**降级顺序**：L4 不可用（无网/无法下载）→ L3（需用户确认，且明确告知会抢焦点）→ L1+L2，并在结论中标注可信度边界。
+
+### 3.4 工具集合（3 → 11）
 
 | 工具 | 状态 | 职责 | 审批 |
 |---|---|---|---|
@@ -219,8 +286,9 @@ L1/L2 在**任何环境**都能跑；L3 不可用时降级为 L1+L2 并**明确�
 | `obsidian_plugin_reload` | ✨ | 重载/启停（内循环高频） | 询问 |
 | `obsidian_plugin_inspect` | ✨ | 只读观测：status/errors/console/dom/css/screenshot | 免 |
 | `obsidian_plugin_eval` | ✨ | 高特权：在 App 上下文执行 JS | **必问** |
+| `obsidian_plugin_e2e` | ✨ | 为项目接入沙箱化 E2E（L4）脚手架 | 免（只在项目内写文件） |
 
-> 合计 10 个。其中 `validate`/`version` 属「发布链」，`build`/`test`/`deploy`/`vault`/`reload` 属「运行链」，`inspect`/`eval` 属「观测链」。
+> 合计 11 个（已实现 8：scaffold / build / deploy / inspect / vault / reload / validate / version；待实现 3：test / e2e / eval）。其中 `validate`/`version` 属「发布链」，`build`/`test`/`deploy`/`e2e`/`vault`/`reload` 属「运行链」，`inspect`/`eval` 属「观测链」。
 
 **拆分依据不是动作数量，而是审批粒度**：DSH 的审批挂在工具级（`tools/pre-execute`）。把 `eval` 混进只读工具会让每一次「看一眼日志」都过闸。约定：**能用 `inspect` 回答的，绝不升级到 `eval`**——绝大多数迭代走免审路径。
 
@@ -230,12 +298,16 @@ L1/L2 在**任何环境**都能跑；L3 不可用时降级为 L1+L2 并**明确�
 
 ### 4.1 `obsidian_plugin_build`
 
-**职责**：把 `src/main.ts` 打成可加载的 `main.js`，并做 L1 自检。
+**职责**：把插件入口打成可加载的 `main.js`，并做 L1 自检。
 
-**三级降级**（逐级在返回值中标注用了哪一级）：
+**入口点解析链（§2.8 证据驱动，必须修）**：显式参数 → `src/main.ts` → **`main.ts`（仓库根）** → 从项目构建配置读取（`esbuild.config.mjs` 的 `entryPoints`、`rollup.config.*` 的 `input`）→ 明确报错并列出候选位置。实测形态：`src/main.ts`（多数）、根 `main.ts`（obsidian-tasks、recent-files）、`src/plugin/main.ts`（editing-toolbar）。
 
-1. 项目有 `node_modules/.bin/esbuild` → 直接调二进制（`--bundle --external:… --format=cjs --target=es2018 --platform=browser --outfile=main.js`）。不依赖 `pnpm` 是否存在，也不受项目自身 `esbuild.config.mjs` 是否进入 watch 影响。
-2. 无本地 esbuild 且项目有 `build` 脚本 → 调 **production** 脚本（`pnpm`/`npm run build`）。
+**产物发现链（§2.8 证据驱动，必须修）**：项目根 `main.js` → 项目根 `.obsidian/plugins/<id>/main.js` → 从构建配置解析输出目录（`outfile` / `dir` / `file`，rollup 的 `output.dir`）→ 在项目内按 `<id>/main.js` 搜索一次 → 报错并列出尝试过的位置。实测形态：根 `main.js`（多数）、`dir: '.'`（obsidian-tasks、kanban）、**测试库内路径**（dataview → `test-vault/.obsidian/plugins/dataview`，editing-toolbar → `Editing-Toolbar-Test-Vault/...`）。
+
+**降级档（逐级在返回值中标注用了哪一级）**：
+
+1. 项目有 `node_modules/.bin/esbuild` → 直接调二进制（`--bundle --external:… --format=cjs --target=es2018 --platform=browser --outfile=<解析出的产物路径>`）。不依赖 `pnpm` 是否存在，也不受项目自身 `esbuild.config.mjs` 是否进入 watch 影响。
+2. 无本地 esbuild 且项目有 `build` 脚本 → 调 **production** 脚本（`pnpm`/`npm run build`），随后走产物发现链定位结果。**rollup 工程靠这一档覆盖**（实测 editing-toolbar：`pnpm run build` → rollup 3.1s 产出 1.7 MB bundle 到它自己的测试库）。
 3. 无本地 esbuild 也无可用脚本 → 不强行构建，返回「先 `pnpm install`」的明确指引。
 
 **外部化清单必须包含 Node 内置模块**（`crypto` / `path` / …，两种写法 `crypto` 与 `node:crypto` 都要）。实现时用真实第三方插件验证才发现：float-mark 用 `import { createHash } from "crypto"`，而 `--platform=browser` 下 esbuild 无法解析内置模块，若只外部化 `obsidian`/`electron`/`@codemirror/*`/`@lezer/*` 会直接构建失败。官方模板与真实插件的 esbuild 配置都外部化了 builtins。
@@ -257,6 +329,13 @@ L1/L2 在**任何环境**都能跑；L3 不可用时降级为 L1+L2 并**明确�
 **不做**：不接管常驻 watch（交给用户或 DSH 后台任务）；产物 `main.js` 本就在模板 `.gitignore` 中，不污染仓库。
 
 ### 4.2 `obsidian_plugin_deploy`
+
+**注意其双重角色（P2c 之后）**：`deploy` 的写入动作同时服务两档——
+
+- **L4 沙箱实例**：把产物写进**沙箱实例自己的库**（沙箱库在工作区内），随后由 `e2e` 在实例内启用并断言；**用户窗口不动**；
+- **L3 用户实例**：写进用户的库/TestVault，随后 `vault ensure` + `reload`（**会抢焦点**，须确认）。
+
+默认走 L4 那一支；只有在需要验证用户真实环境时才走 L3。
 
 ```
 resolve projectDir → 读 manifest 取 id → 解析目标 vault
@@ -294,21 +373,71 @@ Next: obsidian_plugin_inspect action=errors
 
 ### 4.3 `obsidian_plugin_test`（L2 离线冒烟）
 
+**定位纪律**：抽样显示头部插件里**多数没有单测**（§2.8），所以 L2 不是主流验证手段，而是**真机不可用时的最低保障**——挡住「加载即崩溃」。返回值固定标注「离线桩环境，非真机」，不得暗示已验证真实行为。
+
+**加载顺序（已用真实插件探针验证）**：
+
 ```
-node <assets/harness/harness.cjs> <projectDir>/main.js [scenario.mjs]
-  · Module._load 拦截 'obsidian' → 内置桩（Plugin / PluginSettingTab / Notice / Modal / Setting / ItemView …）
-  · 伪造 App：vault / workspace / metadataCache / fileManager / commands / setting（最小实现）
-  · 记录 register* 调用；实例化默认导出类 → onload() → 断言 → onunload() → 断言清理
-  · 兜底：产物不是 CJS 时用项目自身 esbuild 转一次（无 esbuild 则该档不可用并说明）
+1. 建立宿主环境
+   · 项目自带 jsdom（若存在）→ 注入 window/document/navigator/HTMLElement/... 与 globalThis.self
+   · 缺失且产物访问 DOM → 明确报「该插件需要 DOM 宿主，请 pnpm add -D jsdom」，不静默失败
+2. 安装桩：拦截 require("obsidian") → obsidian-stub
+3. 预解析清单：用项目自己的 createRequire 解析 @codemirror/*、@lezer/* 的**真实路径**
+   （它们是项目真实依赖，桩化会导致 StateEffect.define is not a function）
+4. 加载产物 → 取导出（兼容 module.exports 与 module.exports.default）
+5. 实例化 → onload() → 断言 → onunload() → 断言清理 → 输出一行 JSON
 ```
 
-**断言集**：默认导出为 `Plugin` 子类 / `onload()` 不抛 / `onunload()` 不抛且资源被回收 / 无未捕获 rejection / 注册了命令·视图·设置页至少其一（否则 warn）/ `manifest.minAppVersion` 可解析。
+**探针结论（真实插件，非构造样本）**：用上述顺序离线加载 editing-toolbar 的 rollup 产物（1.7 MB 压缩）成功——`loaded: function`、`extends Plugin: true`、实例可构造。
 
-**场景扩展**：项目可放 `dsh/scenarios/<name>.mjs`（`export default async ({ plugin, app, stub }) => …`），用 `scenario` 参数选中。
+**断言集**：
 
-**必须标注局限**：返回值固定带一句「离线桩环境，非真机；真机请用 inspect/`——**不得暗示已验证真实行为**。
+| 断言 | 级别 |
+|---|---|
+| 默认导出是 `Plugin` 子类 | fail |
+| `onload()` 不抛 | fail（附原始栈 + 首个 console.error） |
+| `onunload()` 不抛，且记账的注册资源被回收 | fail / warn |
+| 无未捕获 rejection | fail |
+| 至少注册命令 / 视图 / 设置页之一 | warn |
+| `manifest.minAppVersion` 可解析 | warn |
 
-### 4.4 `obsidian_plugin_vault`（真机链路的前置与清理）
+**桩（`assets/harness/obsidian-stub.cjs`）**：
+
+- 核心 `Plugin` 基类 + **注册调用记账**（`addCommand` / `addRibbonIcon` / `addStatusBarItem` / `addSettingTab` / `registerView` / `registerEvent` / `registerDomEvent` / `registerInterval` / `registerEditorExtension` / `registerMarkdownPostProcessor` / `loadData` / `saveData`）；
+- 伪 App：`vault` / `workspace` / `metadataCache` / `fileManager` / `commands` / `setting`；
+- **宿主全局**：`moment` 等 Obsidian 注入的全局（editing-toolbar 实测需要）；
+- 未实现 API 显式抛 `Not implemented in the offline stub: <name>`。
+
+**前置与降级**：
+
+- 产物不存在 → 指向 `build`，**不隐式构建**；
+- 产物不是 CJS → 报「需项目自身 esbuild 转换」并给出下一步，不崩溃；
+- 项目无 jsdom 而产物需要 DOM → 明确报出缺口与安装命令。
+
+**场景扩展**：项目内 `dsh/scenarios/<name>.mjs`，`export default async ({ plugin, app, stub }) => { … }`；包内提供 `scenarios/example.mjs` 作为模板。
+
+### 4.4 `obsidian_plugin_e2e`（L4 沙箱实例，新增）
+
+**为什么需要**：L3 的代价是用户的注意力（§2.9）。用户窗口被反复切走，开发期间无法做别的事。L4 用**独立 Obsidian 实例 + 独立 userData** 把代价从架构上消除：用户窗口始终不动，且实例可反复重启、可并行、可切换 Obsidian 版本。
+
+**与 `obsidian_plugin_test` 的分工**：
+
+| | `test`（L2） | `e2e`（L4） |
+|---|---|---|
+| 运行环境 | 纯 Node + 桩 | **真实 Obsidian**（独立实例） |
+| 覆盖 | 加载/注册/清理等结构事实 | 真实运行时行为、真实渲染、真实事件 |
+| 依赖 | 无 | Electron/Obsidian 下载 + WebdriverIO |
+
+**实现方式（骨架 + 模板，不自研框架）**：
+
+1. 生成 wdio 配置与测试骨架，基于社区现成方案 `wdio-obsidian-service`（v3.2.0，其底层 `obsidian-launcher` 定位即 *download and launch sandboxed Obsidian instances*），参考 `wdio-obsidian-service-sample-plugin` 的模板；
+2. 生成的脚手架包含：把项目产物装入**沙箱实例的库**、启动实例、断言插件加载、跑项目自带的 `.e2e.ts` 场景；
+3. **不把 wdio 依赖打进本插件**——它属于用户项目（`pnpm add -D @wdio/cli wdio-obsidian-service`），本插件只负责生成与说明；
+4. **降级**：无法下载 Obsidian/Electron（离线环境）→ 报出原因并回退到 L3（需用户确认且告知会抢焦点）或 L1+L2。
+
+**验收意义**：L4 是 P2 之后**消除用户干扰**的关键一环，也是唯一能验证「多 Obsidian 版本兼容性」的档位（对 `minAppVersion` 的声明做实证）。
+
+### 4.5 `obsidian_plugin_vault`（L3 用户实例的前置与清理）
 
 | action | 行为 | 是否需要用户 |
 |---|---|---|
@@ -337,7 +466,7 @@ vault-open（内部 IPC，已实测）
 
 **绝不做**：不写 `obsidian.json`（vaultId 不可推导，运行中可能被整体回写）；不静默切走用户当前窗口。
 
-### 4.5 `obsidian_plugin_reload`
+### 4.6 `obsidian_plugin_reload`
 
 循环里调用最频繁的状态变更工具。actions：`reload` / `enable` / `disable` / `rescan` / `unrestrict`。
 
@@ -349,7 +478,7 @@ vault-open（内部 IPC，已实测）
 - **启用顺序**：`deploy` 写入 enable 清单 ≠ App 已启用；实测需要 `plugin:enable`（或下次库加载）后才真正加载；
 - 返回里区分「命令被接受」与「**加载后校验通过**」：用 `app.plugins.plugins` 判定 loaded，并附 `dev:errors` 的结论。
 
-### 4.6 `obsidian_plugin_inspect`（只读观测，免审）
+### 4.7 `obsidian_plugin_inspect`（只读观测，免审）
 
 | action | 命令 | 备注 |
 |---|---|---|
@@ -363,14 +492,14 @@ vault-open（内部 IPC，已实测）
 
 **统一约束**：输出限流截断（单条 ≤ 8KB、总 ≤ 32KB）；所有调用带超时 + 重试；空输出判为挂死。
 
-### 4.7 `obsidian_plugin_eval`（高特权，必审）
+### 4.8 `obsidian_plugin_eval`（高特权，必审）
 
 - `code`：在 App 上下文执行 JS（底层 `obsidian eval code=…`），**返回值回显实际执行的代码**便于审计；
 - 常见用法要走 skill 里给的「配方」而不是让模型即兴写（见 §5.2）；
 - **审批是唯一一道闸**：`vault-open`（改变窗口布局）与 `setEnable`（改变目标库的受限模式）这类调用必须经用户同意；
 - 输出同样截断。
 
-### 4.8 信任弹窗处理（跨工具的横切协议）
+### 4.9 信任弹窗处理（跨工具的横切协议）
 
 ```
 ① 部署/激活前：plugins:restrict 与 trustCheck 体检
@@ -387,20 +516,20 @@ vault-open（内部 IPC，已实测）
 
 **红线**：① 永不静默点击「信任」；② 把「已写盘」「已启用」「已加载」三态分开报告；③ 弹窗存在时**不继续执行任何 `plugin:*` / `dev:*` / `eval` 命令**（只会得到无意义输出）；④ `console` 读取与 `reload` **互斥**：读 console 时必须 attach → 读 → 立即 detach，期间禁止 reload（实测附加状态下 reload 必挂）。
 
-### 4.9 环境体检（preflight）与降级矩阵
+### 4.10 环境体检（preflight）与降级矩阵
 
 | 探测 | 方法 | 失败降级 |
 |---|---|---|
 | CLI 存在 | `which obsidian` → App bundle 路径回退 | L3 不可用；给注册指引（macOS 需管理员弹窗建 `/usr/local/bin/obsidian` 软链） |
 | App 运行 | `obsidian version` + 短超时 | 提示「App 未运行」；`ensure` 可显式请求打开（用户可见的 `open -a`） |
 | 活动库 | `vault info=name` | 需要前台时先 `vault-open` |
-| 受限模式 | `plugins:restrict` | on → 走 §4.8 |
+| 受限模式 | `plugins:restrict` | on → 走 §4.9 |
 | 信任弹窗 | `dev:dom .mod-trust-folder` | 命中 → awaiting-user |
 | vault 注册表 | `obsidian.json`（只读） | 仅支持显式路径 |
-| 项目 esbuild | `node_modules/.bin/esbuild` | §4.1 三级降级 |
+| 项目 esbuild | `node_modules/.bin/esbuild` | §4.1 降级档 |
 | 平台 | `process.platform` | 路径/关窗分支 |
 
-### 4.10 状态与绑定模型
+### 4.11 状态与绑定模型
 
 `<projectDir>/dsh.obsidian.json`（可提交、可手改）：
 
@@ -423,7 +552,7 @@ vault-open（内部 IPC，已实测）
 - 其余配置走插件 `Config`：`defaultMinAppVersion`、`obsidianCliTimeoutMs`（默认 20000）、`cliRetries`（默认 1）、`autoReload`；
 - **不引入第二个状态文件**。
 
-### 4.11 进程执行底座
+### 4.12 进程执行底座
 
 | 场景 | 方式 | 理由 |
 |---|---|---|
@@ -432,20 +561,28 @@ vault-open（内部 IPC，已实测）
 | 打开 App / 关窗 | `open -a Obsidian`（显式 `ensure`）/ `osascript`（macOS 关窗） | 用户可见、可解释 |
 | 未来长任务 | 预留切 `ctx.subprocess` | 当前不做，避免多一个装配失败点 |
 
-### 4.12 开发内循环（写进 skill 的标准动作序列）
+### 4.13 开发内循环（写进 skill 的标准动作序列）
+
+**默认走 L4（沙箱实例），用户窗口全程不动**：
 
 ```
 1. 改 src/**
-2. build   projectDir=…                     # L1，快
-3. test    projectDir=…                     # L2，秒级，先挡低级错误
-4. deploy  projectDir=… (vault=…)           # 写盘 + 启用（首次会引导信任）
-5. reload  projectDir=…                     # 让改动生效
-6. inspect action=errors / console          # 只读，免审
-   inspect action=screenshot                # 视觉核对（read_image）
-   inspect action=dom / css                 # UI 断言
-7. eval    code="…"                         # 仅当 inspect 不足以回答时（需审批）
-8. validate / version                       # 提交前
+2. build   projectDir=…                     # L1，快；含入口/产物解析
+3. test    projectDir=…                     # L2，秒级，先挡「加载即崩」
+4. e2e     projectDir=… action=run          # L4：沙箱实例内安装 + 断言，零干扰
+   （首次需 e2e action=init 生成 wdio 脚手架）
+5. inspect action=errors / console / dom / css / screenshot   # 对着沙箱实例读，免审
+6. eval    code="…"                         # 仅当 inspect 不足以回答时（需审批）
+7. validate / version                       # 提交前
 ```
+
+**需要验证用户的真实环境时才用 L3**（会抢焦点，须显式确认）：
+
+```
+deploy vault=<用户库>  →  vault ensure confirm=true  →  reload  →  inspect
+```
+
+**分界原则**：默认档必须**不打扰用户**；只有「插件在用户真实库/真实配置下是否正常」这类问题，才值得付出抢焦点的代价。
 
 ---
 
@@ -453,22 +590,26 @@ vault-open（内部 IPC，已实测）
 
 ### 5.1 `SKILL.md`
 
-- 工具表补全为 10 个（含「什么时候用我」的一句话）；
-- Workflow 改为 §4.12 的 8 步；
+- 工具表补全为 **11 个**（含「什么时候用我」的一句话）；
+- Workflow 改为 §4.13 的步骤序列，并写明**默认走 L4（沙箱实例，零干扰）**、仅在需要验证用户真实环境时才用 L3；
 - 新增**症状 → 动作**决策表：
 
 | 症状 | 先做什么 | 大概率原因 |
 |---|---|---|
+| 开发时窗口被反复切走 | 改用 L4：`e2e action=run`（沙箱实例） | L3 的 `plugin:*` / `dev:*` 按活动窗口解析，观测前必须带前台 |
 | 插件没出现在 Obsidian 里 | `inspect status` | 库选错 / restricted 模式 / 未重启 |
 | 装了但功能没生效 | `vault status` → 查信任弹窗 | 首次信任未确认（插件不加载） |
+| 部署后 reload 说找不到插件 | `reload action=rescan` | Obsidian 只在库加载时扫描一次插件目录 |
 | 改了代码没变化 | `reload` | 未重载，旧 bundle 在内存 |
 | `Command "x" not found` / `Plugin "x" not found` | 先带目标库到前台 | `plugin:*` 与 `dev:*` 都只作用于活动窗口的库 |
 | 命令无输出且很慢 | 重试一次 | CLI IPC 卡顿（挂死时输出为空） |
 | 刚读过 console 后 reload 卡住 | 先 `dev:debug off` | 调试器附加与 reload 冲突 |
+| build 报「entry point not found」 | 用 `entry` 参数指定入口 | 真实插件入口有 `src/main.ts` / 根 `main.ts` / `src/plugin/main.ts` 三种 |
+| build 后找不到产物 | 看返回里列出的候选位置 | 真实插件可能输出到测试库或 `dir: '.'` |
 | UI 不对 | `inspect dom/css/screenshot` | 选择器作用域、CSS 变量、无障碍 |
 | `require('obsidian')` 报错 | 检查构建外部化 | obsidian 被打进 bundle |
 
-### 5.2 `reference/` 新增两份
+### 5.2 `reference/` 新增三份
 
 **`reference/obsidian-cli.md`**（逃生舱 + 环境隐知识，**不复制命令目录**，开头一句「完整命令清单以 `obsidian help` 与官方文档为准」）：
 
@@ -493,6 +634,13 @@ app.workspace.getLeavesOfType("<view-type>").length
 electron.ipcRenderer.sendSync("vault-open","<abs path>",false)
 ```
 
+**`reference/e2e-sandboxed.md`**（L4 接入指引，**不自研框架**）：
+
+- 为什么需要：L3 的 `plugin:*` / `dev:*` 按活动窗口解析，观测前必须把测试库带前台 → **频繁抢焦点**，用户开发期间无法做别的事；
+- 方案：`wdio-obsidian-service`（WebdriverIO 服务，底层 `obsidian-launcher` 负责*下载并启动沙箱化 Obsidian 实例*），可多版本、可并行、沙箱隔离以免干扰用户系统；
+- 接入路径：以 `wdio-obsidian-service-sample-plugin` 为模板，`pnpm add -D @wdio/cli wdio-obsidian-service`，把项目产物装入沙箱实例的库后跑断言；`obsidian_plugin_e2e action=init` 负责生成这套骨架；
+- 边界：依赖不打进本插件；离线环境无法下载 Obsidian/Electron 时，明确回退到 L3（须确认）或 L1+L2。
+
 ### 5.3 其它文档（遵守 AGENTS.md 同步约定）
 
 `README.md` / `README.zh.md`（英文为默认语言）、`DEVELOP.md` / `DEVELOP.zh.md`（沉淀 §7 的通用规则）、`README.i18n.yaml`（多语言元数据）、`AGENTS.md`（若新增约定）、`doc/harness.default.md`（能力清单/使用规则）、`doc/manual.zh.txt` / `doc/manual.en.txt`、`doc/version-notes.json`（新增 0.4.0 条目）、`assets/skills/obsidian-plugin/SKILL.md`。
@@ -511,17 +659,23 @@ src/
 ├── fs.ts           # Fs seam：路径双身份（OS 路径 / FsTarget）、sandboxPolicy 传递、workspaceRoot 贯穿
 ├── proc.ts         # spawnSync 封装：超时、退出码与空输出分类（run/hasExecutable）
 ├── naming.ts       # 提交命名规则 + 模板占位符渲染 + semver 判定
-├── build.ts        # obsidian_plugin_build：三级降级 + L1 静态自检
+├── build.ts        # obsidian_plugin_build：入口/产物解析 + 降级档 + L1 静态自检
 ├── deploy.ts       # obsidian_plugin_deploy：vault 解析、产物安装、enable 列表合并、绑定写入
+├── cli.ts          # CLI 调用与结果分类（退出码不可信 / 空输出=挂死 / 重试）
+├── inspect.ts      # obsidian_plugin_inspect：观测动作 + 输出截断 + 身份自证
+├── vault.ts        # obsidian_plugin_vault：库状态、两段式 ensure、关闭
+├── reload.ts       # obsidian_plugin_reload：reload/enable/disable/rescan/unrestrict
 └── bundle-doc.ts   # 包内 doc/ 资源读取
 test/
-└── p0.test.ts      # node:test，跑在 lib/ 产物上（裸 Node，无需 harness）
+├── p0.test.ts      # build/deploy（裸 Node，跑在 lib/ 上）
+└── p1.test.ts      # CLI 分类 / eval 解析 / argv 组装 / 截断
 assets/
 ├── templates/      # 与官方 sample-plugin 保持一致
-└── skills/obsidian-plugin/   # SKILL.md + reference/
+├── harness/        # （P2 新建）harness.cjs + obsidian-stub.cjs + scenarios/
+└── skills/obsidian-plugin/   # SKILL.md + reference/{obsidian-cli,debugging-playbook,e2e-sandboxed}.md
 ```
 
-P1+ 预留（尚未创建）：`preflight.ts`（CLI/App/vault/受限模式/信任 探测）、`vault.ts`（`vault-open` 与库生命周期）、`trust.ts`（信任弹窗横切协议）、`probe.ts`（CLI 动作映射与输出截断）、`assets/harness/`（离线冒烟）、`assets/skills/.../reference/{obsidian-cli,debugging-playbook}.md`。
+P2/P3 预留（尚未创建）：`harness.ts`（`obsidian_plugin_test` 编排）、`e2e.ts`（`obsidian_plugin_e2e` 脚手架）、`preflight.ts`（把现有探测收敛到一处）、`test/p2.test.ts`。
 
 **分层原则**：`index.ts` 只做「组合 + 工具声明」，任何可被测试直接调用的逻辑都放在可独立导入的模块里（`test/` 直接从 `lib/` 导入，不经过 Cordis）。
 
@@ -531,10 +685,12 @@ P1+ 预留（尚未创建）：`preflight.ts`（CLI/App/vault/受限模式/信�
 |---|---|---|---|---|
 | **P0** | `build` + `deploy`（离线路径）+ `dsh.obsidian.json` 绑定 | 「装得进去」，无 CLI 也能用 | 无 | ✅ **已实现**（14 项测试 + 真实第三方插件 float-mark 端到端验证） |
 | **P1** | `vault` + `reload` + `inspect`（含受限模式/信任处置） | 「跑得起来、看得见」 | Obsidian + CLI | ✅ **已实现**（29 项测试 + float-mark 真机全链路验收） |
-| **P2** | `test` + `assets/harness` | 无 App 环境的冒烟回归 | Node | 待做 |
-| **P3** | `eval` + 审批策略 + skill/文档同步 + `src/` 分层重构 | 完整闭环与可维护性 | P0–P2 | 部分完成（`src/` 已分层；skill/文档随 P0 同步） |
+| **P2a（前置）** | `build` 硬化：入口点解析链 + 产物发现链 | 真实插件（rollup/自定义入口/产物落测试库）能被构建与定位 | 无 | 待做 |
+| **P2b** | `test` + `assets/harness`（L2 离线冒烟） | 无 App 环境下的最低保障：挡住「加载即崩」 | Node | 待做 |
+| **P2c** | `e2e`（L4 沙箱实例脚手架）+ `reference/e2e-sandboxed.md` | **消除抢焦点**：默认验证档不再打扰用户 | 能下载 Electron/Obsidian | 待做 |
+| **P3** | `eval` + 审批策略 + `preflight` 收敛 + 文档收尾 | 完整闭环与可维护性 | P0–P2 | 部分完成（`src/` 已分层；skill/文档随 P0/P1 同步） |
 
-**P0 与 P1 的边界是刻意的**：先把不依赖 CLI 的部署做扎实，再叠加有 CLI 时的体验增强。
+**阶段边界的理由**：P2a 必须先于 P2b/P2c——入口与产物解析不对，后面两档连「验证对象」都找不到（editing-toolbar 已实测证明）。P2c 优先级高于 P3，因为它解决的是**用户的真实痛点（抢焦点）**，而不是能力补全。
 
 ### 6.3 验收标准（含本次已实测项）
 
@@ -547,8 +703,11 @@ P1+ 预留（尚未创建）：`preflight.ts`（CLI/App/vault/受限模式/信�
 | A5 | 受限模式开启（逐库） | `inspect status` 明确提示该库的受限状态，并提前预警信任弹窗 | ✅ 机制已确认（含 per-vault 存储） |
 | A6 | 调试器已附加时调用 reload | 拒绝执行并提示先 detach，不挂死 | ✅ 冲突已复现 |
 | A7 | CLI 静默超时 | 重试后成功；连续失败报「App 无响应」+ 恢复指引 | ✅ 现象已复现 |
-| A8 | 非模板工程（无 esbuild.config.mjs） | 默认参数构建成功或给出明确指引 | 待验 |
+| A8 | 非模板工程（无 esbuild.config.mjs） | 走 L2 构建脚本或给出明确指引 | 待验 |
 | A9 | 文档一致性 | README/DEVELOP/harness/manual/version-notes/SKILL 全部同步 | 待做 |
+| **A10** | **obsidian-tasks**（根 `main.ts` + `dir: '.'` 产物 + Svelte 构建链 + 177 个既有测试） | `build` 能解析入口与产物；L2 冒烟给出结论；L4 沙箱内加载成功 | 待做（P2 主验收样本） |
+| **A11** | **零干扰验收**：全程只用 L4/L2/L1 完成一次改动→验证 | **用户的 Obsidian 窗口全程不被切换、焦点不被抢**（用切换次数=0 衡量） | 待做（P2c 核心验收） |
+| **A12** | 多版本兼容（L4 独有） | 在 `minAppVersion` 与最新版两个 Obsidian 版本上跑同一套断言 | 待做 |
 
 ---
 
@@ -569,6 +728,9 @@ P1+ 预留（尚未创建）：`preflight.ts`（CLI/App/vault/受限模式/信�
 13. **沙箱只约束自己**：`ctx.fs` 受 policy 约束，spawn 的子进程不受约束——文档必须写明。
 14. **状态会被外部缓存，写盘不等于对方看见**：Obsidian 只在库加载时扫描插件目录，部署后的文件对运行时命令完全不可见（实测 `Plugin "x" not found`）。工具必须在「写盘」与「对方可见」之间插入一次显式的重新索引（此处为 `app.plugins.loadManifests()`），并把这一步作为前置条件而不是让调用者去猜。
 15. **一次只暴露一层安全开关**：受限模式这类逐库安全设置，必须做成显式动作（写明影响范围与「会重载窗口」的后果），绝不能作为其它操作顺带的副作用。
+16. **不打扰用户是默认约束，不是优化项**：只要一条能力需要把用户的窗口带到前台，它就必须有「沙箱实例」这一档替代（独立实例 + 独立 userData + CDP 驱动）。默认路径绝不允许抢焦点。
+17. **入口与产物必须从项目配置推断，不能硬编码**：实测真实插件存在 `src/main.ts`、根 `main.ts`、`src/plugin/main.ts` 三种入口，产物也存在项目根、`dir: '.'`、测试库内三种落点。硬编码等于把一部分真实插件直接挡在门外。
+18. **离线桩的加载顺序是有依赖的**：宿主环境（jsdom/self/宿主全局）→ 安装 `obsidian` 桩 → 用项目自身 require 预解析 `@codemirror/*` 与 `@lezer/*` 的**真实**路径 → 再加载产物。顺序错了会以各种「`x` is not a function」的形式失败（实测：`StateEffect.define`、`moment.locale`、`self is not defined`）。
 
 ---
 
@@ -576,14 +738,19 @@ P1+ 预留（尚未创建）：`preflight.ts`（CLI/App/vault/受限模式/信�
 
 | 风险 | 影响 | 对策 |
 |---|---|---|
-| 内部 IPC（`vault-open`）在未来版本变更 | 首次登记自动化失效 | 降级链 + 人工兜底（§4.4）；集中在一处实现便于跟随官方 |
+| 内部 IPC（`vault-open`）在未来版本变更 | 首次登记自动化失效 | 降级链 + 人工兜底（§4.5）；集中在一处实现便于跟随官方 |
 | CLI 处于 Early Access，命令面变化 | L3 能力波动 | 能力探测 + 降级；`dev:cdp` 作逃生舱 |
 | CLI 挂死/卡顿（本次多次复现） | 工具返回慢或误判 | 超时 + 重试 + 空输出判定；必要时提示重启 App/重注册 |
 | 信任弹窗与**每库**受限模式绑定（localStorage `enable-plugin-<appId>`） | 在测试库上的信任不会波及其它库；但弹窗本身会阻塞加载 | 只引导不代点；三态报告；提前预警 |
-| 真机操作会切走用户窗口 | 打扰用户 | 优先测试库；`ensure` 前确认；`close` 回收 |
-| 离线桩与真实 API 有差异 | 假阳性 | 固定标注「桩环境」；断言只覆盖结构性事实 |
-| 截图/日志含私有内容 | 隐私 | 只落盘到工作区内；不做自动上传 |
-| 工具数 3 → 10 | 选择成本 | 描述写「何时用我」；审批分层；skill 决策表 |
+| **真机操作会切走用户窗口、抢焦点** | **开发期间用户无法做别的事**（真实反馈） | **L4 沙箱实例成为默认档**；L3 只在验证用户真实环境时使用，且必须确认 |
+| L4 依赖下载 Obsidian/Electron | 离线/受限网络下不可用 | 明确报出原因并回退 L3（须确认）或 L1+L2；不做静默降级 |
+| L4 的实例与用户实例版本不一致 | 结论可能与用户环境不符 | 沙箱实例支持**指定版本**（含 `earliest` = 自动取 manifest 的 `minAppVersion`），可在多版本上跑同一套断言（A12）；与用户环境相关的结论仍以 L3 为准 |
+| L4 每次启动需下载 Obsidian/Electron（首次约数十 MB） | 首次使用有等待成本 | 首次下载后本地缓存；文档需说明首次开销，并在离线时明确回退而不是静默降级 |
+| 离线桩与真实 API 有差异 | 假阳性 | 固定标注「桩环境」；断言只覆盖结构性事实；`@codemirror/*` 等真实依赖不桩化 |
+| 桩覆盖不足导致「未实现 API」频发 | 冒烟不可用 | 桩显式抛错并给出 API 名，按真实插件样本迭代补齐；不追求一次覆盖全部 |
+| 真实插件入口/产物形态继续分化 | 构建失败 | 入口/产物解析链 + 报错时列出所有尝试过的位置（A10 用 obsidian-tasks 兜底验证） |
+| 截图/日志含私有内容 | 隐私 | 只落盘到工作区内；不做自动上传；L4 实例使用独立 userData，不读取用户库 |
+| 工具数 3 → 11 | 选择成本 | 描述写「何时用我」；审批分层；skill 决策表 |
 
 ---
 
@@ -648,3 +815,44 @@ document.querySelectorAll(".mod-trust-folder").length
   }
 }
 ```
+
+### 9.4 真实插件抽样明细（§2.8 的原始数据）
+
+数据来源：官方索引 `obsidianmd/obsidian-releases/community-plugins.json`（**7722 个插件**），逐仓库读取构建配置、入口、产物落点与测试基建（`HEAD` 分支，只读关键文件）。
+
+| 插件 | 构建器 | 入口 | 产物落点 | 测试基建 |
+|---|---|---|---|---|
+| dataview | rollup | `src/main.ts` | `test-vault/.obsidian/plugins/dataview` | jest + jsdom（18） |
+| Templater | esbuild | `src/main.ts` | `outfile: main.js` | **wdio-obsidian-service** |
+| obsidian-tasks | esbuild | **`main.ts`（根）** | `dir: '.'` | jest + jsdom（**177**） |
+| kanban | esbuild | `./src/main.ts` | `dir: './'` | 无 |
+| calendar | rollup | `src/main.ts` | `file: main.js` | jest（0 个用例） |
+| excalidraw | rollup | 非标准写法（`input` 未匹配常规形态） | — | 无 |
+| obsidian-git | esbuild | `src/main.ts` | `outfile: main.js` | vitest（5） |
+| recent-files | esbuild | **`main.ts`（根）** | `outfile: main.js` | 无 |
+| minimal-settings | esbuild | `src/main.ts` | `outfile: main.js` | 无 |
+| style-settings | esbuild | — | — | vitest（0） |
+| cmdr | esbuild | `src/main.ts` | — | vitest + jsdom（7） |
+
+**分布小结**：esbuild 7 / rollup 3 / 其它 1；入口 3 种形态；产物 3 种落点；测试基建两极分化（多数为 0）。
+
+### 9.5 L4 沙箱实例的技术依据
+
+| 事实 | 来源 |
+|---|---|
+| `obsidian-launcher` v3.2.0：下载并启动不同版本的 Obsidian、向库安装插件与主题、**启动带独立用户配置目录的沙箱实例** | 其 README 原文 |
+| `copy: true` 打开**库副本**（不改原库）；`plugins` 可装本地插件与社区插件；`appVersion: "earliest"` 取 manifest 的 `minAppVersion`；区分 `appVersion` / `installerVersion` | 其 README 原文 |
+| 其依赖包含 `@electron/get`（按版本下载）与 `chrome-remote-interface`（CDP 驱动），另有 `classic-level` | npm registry 元数据 |
+| `wdio-obsidian-service` v3.2.0 = 该 launcher + WebdriverIO 服务；能力：多版本测试、**沙箱化以免干扰用户系统**、库切换、CI | 仓库 README |
+| 接入模板：`wdio-obsidian-service-sample-plugin` | 同上 |
+| 社区实际使用者：Templater（`wdio.conf.mts` + `wdio-obsidian-service`） | §9.4 抽样 |
+
+**对 L3 / L4 的分工结论**：
+
+| | L3 用户实例 | L4 沙箱实例 |
+|---|---|---|
+| 验证对象 | 插件的**真实使用环境**（用户的库、配置、插件共存） | 插件在**真实 Obsidian 运行时**中的行为 |
+| 干扰 | **抢焦点、切窗口** | **零干扰**（用户窗口不动） |
+| 可重复性 | 差（用户可能随时改状态） | 好（每次干净实例） |
+| 多版本 | 只测用户装的版本 | 可测任意版本（含 `minAppVersion` 断言） |
+| 默认档 | 否 | **是** |
