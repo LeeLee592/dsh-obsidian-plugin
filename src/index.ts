@@ -9,6 +9,7 @@ import { deployPlugin } from "./deploy.js";
 import { inspect } from "./inspect.js";
 import { vaultAction } from "./vault.js";
 import { reloadPlugin } from "./reload.js";
+import { testPlugin } from "./harness.js";
 import {
   isSemver,
   namingProblems,
@@ -45,6 +46,7 @@ export { classify, runCli, explainCliFailure, type CliResult, type CliStatus } f
 export { inspect, truncate, type InspectAction, type InspectArgs } from "./inspect.js";
 export { vaultAction, registryPath, readRegistry, type VaultAction, type VaultArgs } from "./vault.js";
 export { reloadPlugin, type ReloadAction, type ReloadArgs } from "./reload.js";
+export { testPlugin, parseHarnessOutput, renderSmokeReport, type TestArgs } from "./harness.js";
 
 // ---- version notes / HARNESS context (external doc/ shipped with the package) ----
 
@@ -407,6 +409,21 @@ export function apply(ctx: any, config: any) {
           return typeof manifest?.id === "string" ? manifest.id : undefined;
         },
       });
+    },
+  }));
+
+  ctx.tools.register(defineTool({
+    name: "obsidian_plugin_test",
+    description: "Offline smoke test (L2): loads the built bundle in plain Node against a stubbed Obsidian API and exercises the real lifecycle — default export is a Plugin subclass, onload() runs, registrations happen, onunload() cleans up, no unhandled rejections. Runs without any Obsidian installed, so use it as the floor that catches 'crashes on load'. It does NOT verify runtime behaviour: the report always says it is a stub environment and points at inspect/e2e for real verification.",
+    parameters: {
+      projectDir: { type: "string", required: true, description: "Plugin project directory (absolute or workspace-relative)." },
+      bundle: { type: "string", description: "Explicit main.js path; omit to auto-detect (same chain as obsidian_plugin_build)." },
+      scenario: { type: "string", description: "Optional project scenario module (e.g. dsh/scenarios/example.mjs) that gets { plugin, app, stub } to assert behaviour offline." },
+      timeoutMs: { type: "number", description: "Harness timeout in ms (default 120000)." },
+    },
+    output: textOutput,
+    async execute(args: any, exec: any) {
+      return testPlugin(fs, args, makeCall(exec));
     },
   }));
 
