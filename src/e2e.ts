@@ -72,7 +72,11 @@ async function status(fs: Fs, args: E2eArgs, call: FsCall): Promise<string> {
   const manifest = await fs.readJson(join(projectDir, "manifest.json"));
   if (!manifest?.id) return 'Error: manifest.json not found, invalid JSON, or missing a string "id".';
 
-  const files = ["wdio.conf.mts", "tsconfig.e2e.json", "specs/example.e2e.ts"].map((f) => [f, join(dir, f)] as const);
+  const files = [
+    ["wdio.conf.mts", join(projectDir, "wdio.conf.mts")],
+    ["tsconfig.e2e.json", join(projectDir, "tsconfig.e2e.json")],
+    ["specs/example.e2e.ts", join(dir, "specs", "example.e2e.ts")],
+  ] as const;
   const present = [];
   for (const [rel, path] of files) present.push(`${rel}: ${(await fs.exists(path)) ? "present" : "missing"}`);
 
@@ -96,29 +100,33 @@ async function init(fs: Fs, args: E2eArgs, call: FsCall, artifactDir?: string): 
   const manifest = await fs.readJson(join(projectDir, "manifest.json"));
   if (!manifest?.id) return 'Error: manifest.json not found, invalid JSON, or missing a string "id".';
 
-  const dir = join(projectDir, args.dir ?? "e2e");
+  const specsDir = join(projectDir, args.dir ?? "e2e");
   const vars: E2eVars = {
     pluginId: manifest.id,
     pluginName: manifest.name ?? manifest.id,
     pluginDir: pluginDirFor(projectDir, artifactDir ?? join(projectDir, "main.js")),
   };
 
+  // `wdio run` resolves its config from the project root, so the config lives
+  // there and only the specs/vault live under the scaffold directory. Putting the
+  // config inside `e2e/` makes the very first `pnpm run e2e` fail with
+  // "missing configuration".
   const rendered: Array<[string, string]> = [
-    ["wdio.conf.mts", readAsset("../assets/e2e/wdio.conf.mts")],
-    ["tsconfig.e2e.json", readAsset("../assets/e2e/tsconfig.e2e.json")],
-    ["specs/example.e2e.ts", readAsset("../assets/e2e/example.e2e.ts")],
+    [join(projectDir, "wdio.conf.mts"), readAsset("../assets/e2e/wdio.conf.mts")],
+    [join(projectDir, "tsconfig.e2e.json"), readAsset("../assets/e2e/tsconfig.e2e.json")],
+    [join(specsDir, "specs", "example.e2e.ts"), readAsset("../assets/e2e/example.e2e.ts")],
   ];
 
   const written: string[] = [];
   const skipped: string[] = [];
-  for (const [rel, template] of rendered) {
-    const target = join(dir, rel);
+  for (const [target, template] of rendered) {
+    const label = relative(projectDir, target);
     if ((await fs.exists(target)) && !args.force) {
-      skipped.push(rel);
+      skipped.push(label);
       continue;
     }
     await fs.writeText(target, renderTemplate(template, vars), call.policy, call.signal);
-    written.push(rel);
+    written.push(label);
   }
 
   // The sandbox downloads Obsidian builds and copies the vault; keep that out of git.
@@ -154,7 +162,7 @@ async function init(fs: Fs, args: E2eArgs, call: FsCall, artifactDir?: string): 
 
   const lines = [
     `Scaffolded sandboxed E2E for ${manifest.id}`,
-    `  wrote:    ${written.length ? written.map((f) => join(dir.replace(projectDir, "."), f)).join(", ") : "(nothing new)"}`,
+    `  wrote:    ${written.length ? written.join(", ") : "(nothing new)"}`,
   ];
   if (skipped.length) lines.push(`  kept:     ${skipped.join(", ")} (already present; pass force=true to overwrite)`);
   lines.push(
@@ -172,6 +180,12 @@ async function init(fs: Fs, args: E2eArgs, call: FsCall, artifactDir?: string): 
     "Why this is the default verification tier: the sandbox is a separate Obsidian",
     "with its own config directory and a copy of the vault, so nothing switches your",
     "window or steals focus while it runs.",
+    "",
+    "First run downloads its own Obsidian (tens of MB) into ./.obsidian-cache and",
+    "reuses it afterwards. On a slow connection that download can exceed the",
+    "runner's own body timeout and fail with UND_ERR_BODY_TIMEOUT — just run it",
+    "again; the cache is kept, so progress is not lost. For offline or CI use,",
+    "pre-seed the cache and point at it with cacheDir / OBSIDIAN_CACHE.",
     "",
     `Next: pnpm run build && pnpm run e2e`,
   );

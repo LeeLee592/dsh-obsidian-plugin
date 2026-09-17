@@ -8,12 +8,18 @@
 //
 // Run:  pnpm run e2e          (all specs)
 //       pnpm run e2e:watch    (keep Obsidian open between runs)
+//
+// The first run downloads its own Obsidian into ./.obsidian-cache (tens of MB)
+// and reuses it afterwards. On a slow connection that download can exceed the
+// runner's body timeout and fail with UND_ERR_BODY_TIMEOUT: run it again, the
+// cache is kept. For offline or CI use, pre-seed the cache and set cacheDir
+// (or OBSIDIAN_CACHE) to it.
 
 import { browser } from "@wdio/globals";
 import type { Options } from "@wdio/types";
 
 const PLUGIN_ID = process.env.E2E_PLUGIN_ID ?? "{{PLUGIN_ID}}";
-const E2E_VAULT = "./e2e/vault";
+const E2E_VAULT = "./e2e/vault";   // a copy is made; your notes are never touched
 const PLUGIN_DIR = "./{{PLUGIN_DIR}}";
 
 export const config: Options.Testrunner = {

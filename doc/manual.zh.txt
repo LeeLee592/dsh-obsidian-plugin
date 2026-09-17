@@ -2,20 +2,31 @@
 ==========================================
 
 【这是什么插件】
-给 DeepSeek Harness 智能体提供 Obsidian 插件开发能力，包含一个知识 skill 与八个工具：
+给 DeepSeek Harness 智能体提供 Obsidian 插件开发能力，包含一个知识 skill 与十个工具：
 
 - obsidian-plugin skill（知识库）：提供 Obsidian 插件开发规范（命名/提交规则、无障碍、代码质量、提交与 Scorecard），指导 agent 的开发流程。
 - obsidian_plugin_scaffold：基于官方 obsidian-sample-plugin 模板生成合规插件骨架（14 个文件），内置命名/提交规则校验。
-- obsidian_plugin_build：把插件项目打包成可加载的 main.js（CommonJS，obsidian 外部化）并做静态自检；三级降级（项目本地 esbuild → 项目自身的 production build 脚本 → 给出可操作的报错），不启动 watch 进程，并报告实际使用的层级。
+- obsidian_plugin_build：把插件项目打包成可加载的 main.js（CommonJS，obsidian 外部化）并做静态自检（L1 档）；入口按「显式 entry → src/main.ts → 仓库根 main.ts → 项目自身的 esbuild/rollup/vite 配置 → package.json main」解析，产物按「项目根 → 配置里的 outfile/outdir/file/dir → 项目内测试库布局 → 有界搜索（含 <dir>/.obsidian/plugins/<id>/）」解析，失败时列出全部尝试过的位置，也可用 outDir 直接指定产物目录；三级降级（项目自身的 production build 脚本——只要存在打包配置就优先走它，因为配置里带的插件无法从命令行补齐 → 项目本地 esbuild 直调，用于没有配置可遵循的项目或显式的非 production 选择（会警告未应用项目插件）→ 给出可操作的报错），不启动 watch 进程，并报告实际使用的层级。
 - obsidian_plugin_deploy：把构建产物安装进 vault 的 .obsidian/plugins/<id>/，并把插件 id 合并进该库的 community-plugins.json（保留既有条目），随后把该 vault 记入项目旁的 dsh.obsidian.json；分列报告 written / enabled / active 三态（active 在后续阶段前恒为 unknown）。
 - obsidian_plugin_inspect：只读观测运行中的 Obsidian，绝不改动 App：status 一次给出体检事实（App 版本、已注册的库、实际应答的库、该库的受限模式状态、目标插件是否已安装/启用/版本匹配、信任弹窗是否待确认），另有 errors / console / dom / css / screenshot / trustCheck。
 - obsidian_plugin_vault：管理真机验证用的库：status 报告已注册的库、当前活动窗口与激活将要做什么；ensure 是两步确认——不带 confirm 只描述后果，带 confirm=true 才登记/打开该库（Obsidian 会切到前台），随后由 App 自证哪个库是活动库，并如实上报信任弹窗而不代为确认；close 关测试窗口（macOS）；prune 尚未实现。
 - obsidian_plugin_reload：让代码改动在运行中的 App 生效：reload（默认）/ enable / disable；rescan 重扫插件清单索引（Obsidian 只在库加载时扫描一次插件目录，刚部署的插件在重扫前对所有插件命令都不可见）；unrestrict 显式关闭该库的受限模式（会重载窗口）；重载后校验插件是否真的注册进 App，并回报插件打印的内容。
+- obsidian_plugin_test：离线冒烟（L2 档）：在纯 Node 里用桩化的 Obsidian API 加载构建产物，真跑一遍生命周期（默认导出是 Plugin 子类、onload() 执行、注册动作发生、onunload() 清理、无未处理的 rejection），不需要安装 Obsidian；会真实解析项目自身的 @codemirror/* 与 @lezer/*，DOM 相关插件可用项目自带的 jsdom（缺 jsdom 时报告会写明并给出安装命令）；可用可选场景文件（dsh/scenarios/<name>.mjs，收到 { plugin, app, stub }）扩展。它不验证运行期行为：报告固定标注这是桩环境，并指向 inspect/e2e 做真实验证。
+- obsidian_plugin_e2e：脚手架化沙箱端到端测试（L4 档，不碰你的 Obsidian）：init 写入 WebdriverIO + wdio-obsidian-service 配置（wdio.conf.mts、tsconfig.e2e.json 与起始 spec——脚手架目录由 dir 指定，默认 e2e/），它启动的独立 Obsidian 使用独立配置目录与库副本，因此不切窗口、不抢焦点；同时加入 e2e / e2e:watch 脚本并把下载产物目录追加进 .gitignore（幂等，手改过的文件在 force=true 前保留）。status 只报告现状与确切的安装命令、不写任何文件；runner 依赖留在你的项目里，套件由项目自己跑（pnpm run e2e）。
 - obsidian_plugin_validate：校验 manifest 必填字段、命名规则、versions.json 映射与 package.json 版本一致性，并运行 eslint-plugin-obsidianmd 检查。
 - obsidian_plugin_version：同步 manifest.json / versions.json / package.json 三处版本。
 
 【使用】
-对 DSH 说「帮我新建一个 Obsidian 插件…」，agent 会加载 obsidian-plugin skill，按照 Obsidian Plugin Development Guidelines 的指导进行开发，并在过程中调用工具完成脚手架、构建、部署、真机观察与验证、校验与版本管理。
+对 DSH 说「帮我新建一个 Obsidian 插件…」，agent 会加载 obsidian-plugin skill，按照 Obsidian Plugin Development Guidelines 的指导进行开发，并在过程中调用工具完成脚手架、构建、离线冒烟、部署、沙箱化端到端测试、真机观察与验证、校验与版本管理。
+
+【验证档位】
+验证共四档，日常开发循环默认走 L1 + L2 + L4：
+- L1 静态：obsidian_plugin_build 内的产物 / 模块格式 / manifest 检查，无干扰。
+- L2 离线冒烟：obsidian_plugin_test 在纯 Node 里用桩化的 Obsidian API 加载产物，不需要 Obsidian，无干扰。
+- L3 用户的 Obsidian：obsidian_plugin_vault / obsidian_plugin_reload / obsidian_plugin_inspect / eval 经 CLI 作用于你自己的运行中 App，会切换你的窗口、抢焦点——只用于验证你的真实环境。
+- L4 沙箱 Obsidian：obsidian_plugin_e2e 接好的 WebdriverIO 套件运行一个独立 Obsidian（独立配置目录 + 库副本），零干扰。
+
+只允许修改会话工作区内创建的测试库；你自己的库是只读的，包括 CLI 侧的间接写入——plugin:enable / unrestrict 改写的是当前活动窗口那个库，工具会拒绝对非测试库执行。默认路径绝不切换你的窗口、绝不抢焦点。
 
 【命名规则】（工具内置校验，也用于自行检查）
 - id：小写字母/数字/连字符/下划线，不含 "obsidian"，不以 "plugin" 结尾。

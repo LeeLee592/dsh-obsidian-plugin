@@ -50,14 +50,28 @@ downloaded builds out of git.
 ## Layout
 
 ```
+wdio.conf.mts        # at the PROJECT ROOT: `wdio run` resolves its config there
+tsconfig.e2e.json    # types for the specs
 e2e/
-  wdio.conf.mts      # service config: version, vault copy, plugin install path
-  tsconfig.e2e.json  # types for the specs
   specs/example.e2e.ts
+  vault/             # created by the service
+.obsidian-cache/     # downloaded Obsidian builds (gitignored)
 ```
 
-`e2e/vault/` is created by the service; `.e2e-obsidian/` holds downloaded builds.
-Both are gitignored by the scaffold.
+The config lives at the project root because `wdio run` looks for `wdio.conf.*`
+there — putting it inside `e2e/` makes the very first `pnpm run e2e` fail with
+"missing configuration". The scaffold directory is configurable with `dir`.
+
+`e2e/vault/` is a **copy** made by the service; `.obsidian-cache/` holds the
+downloaded builds. Both are gitignored by the scaffold.
+
+**First run downloads its own Obsidian** (tens of MB) into `.obsidian-cache/` and
+reuses it afterwards. On a slow connection that download can exceed the runner's
+own body timeout and fail with `UND_ERR_BODY_TIMEOUT`; run it again — the cache
+is kept, so progress is not lost. For offline or CI use, pre-seed the cache and
+point at it with `cacheDir` (or `OBSIDIAN_CACHE`). This is the one thing the tier
+cannot do without network access, and it is why the fallback order puts L3 above
+L1+L2 rather than pretending the sandbox is always available.
 
 ## Writing a spec
 

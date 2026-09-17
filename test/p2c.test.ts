@@ -50,7 +50,7 @@ test("status reports what is missing instead of writing anything", async () => {
     assert.match(out, /deps: {5}missing [^\n]*wdio-obsidian-service/);
     assert.match(out, /pnpm add -D/);
     assert.match(out, /never switched or focused/);
-    assert.equal(await fs.exists(join(dir, "e2e", "wdio.conf.mts")), false, "status must not write");
+    assert.equal(await fs.exists(join(dir, "wdio.conf.mts")), false, "status must not write");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -62,7 +62,7 @@ test("init writes the scaffold, wires scripts and keeps the project's own entrie
     const out = await e2eAction(fs, { action: "init", projectDir: dir }, {}, join(dir, "TestVault", ".obsidian", "plugins", "demo-notes"));
     assert.match(out, /Scaffolded sandboxed E2E for demo-notes/);
 
-    const conf = await readFile(join(dir, "e2e", "wdio.conf.mts"), "utf8");
+    const conf = await readFile(join(dir, "wdio.conf.mts"), "utf8");
     assert.match(conf, /"demo-notes"/, "the plugin id is baked into the config");
     assert.match(conf, /TestVault\/\.obsidian\/plugins\/demo-notes/, "the sandbox installs from where the project builds");
     assert.doesNotMatch(conf, /\{\{/, "no placeholder may survive");
@@ -88,7 +88,7 @@ test("init is idempotent: existing files are kept unless force is set", async ()
   const dir = await project();
   try {
     await e2eAction(fs, { action: "init", projectDir: dir });
-    const target = join(dir, "e2e", "wdio.conf.mts");
+    const target = join(dir, "wdio.conf.mts");
     await writeFile(target, "// customised by hand\n");
 
     const kept = await e2eAction(fs, { action: "init", projectDir: dir });
@@ -112,11 +112,12 @@ test("the generated config documents why the tier exists", async () => {
   const dir = await project();
   try {
     await e2eAction(fs, { action: "init", projectDir: dir });
-    const conf = await readFile(join(dir, "e2e", "wdio.conf.mts"), "utf8");
+    const conf = await readFile(join(dir, "wdio.conf.mts"), "utf8");
     assert.match(conf, /switch windows and steal\s+\/\/ your focus|switch windows and steal/i);
     assert.match(conf, /isolated user-configuration directory/);
     assert.match(conf, /copy: true/, "the sandbox must work on a copy of the vault");
     assert.match(conf, /earliest/, "minAppVersion is the default version under test");
+    assert.match(conf, /UND_ERR_BODY_TIMEOUT|obsidian-cache/, "the first-run download is documented");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

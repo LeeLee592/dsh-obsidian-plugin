@@ -11,13 +11,15 @@
 两个互补、职责单一的部分：
 
 1. **知识（skill）**——Obsidian 插件开发规范（命名/提交规则、无障碍、代码质量、提交与 Scorecard）。源自 [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill)，内置为 [assets/skills/obsidian-plugin](assets/skills/obsidian-plugin/SKILL.md)，并在 `apply()` 里通过 `ctx.skills.register` 注册为 runtime skill（不依赖 project root）。
-2. **护栏（tool bundle）**——本仓库 `@leelee592/dsh-obsidian-plugin`，用 typed schema 暴露 8 个工具，把确定性操作封装起来：
+2. **护栏（tool bundle）**——本仓库 `@leelee592/dsh-obsidian-plugin`，用 typed schema 暴露 10 个工具，把确定性操作封装起来：
    - `obsidian_plugin_scaffold` —— 复用 obsidian-sample-plugin 模板生成骨架
-   - `obsidian_plugin_build` —— 把 src/main.ts 打包成可加载的 main.js + 静态自检
+   - `obsidian_plugin_build` —— 打包成可加载的 main.js（入口与产物从项目自身配置解析）+ 静态自检
    - `obsidian_plugin_deploy` —— 把构建产物装进 vault 并启用插件 id
    - `obsidian_plugin_inspect` —— 只读观测运行中的 App（status / errors / console / dom / css / screenshot / trustCheck）
    - `obsidian_plugin_vault` —— 管理真机验证用的库（status / ensure / close / prune）
    - `obsidian_plugin_reload` —— 让改动在运行中的 App 生效，并校验插件确实加载
+   - `obsidian_plugin_test` —— 离线冒烟：在纯 Node 里用桩化的 Obsidian API 加载构建产物
+   - `obsidian_plugin_e2e` —— 脚手架化沙箱端到端测试（WebdriverIO + wdio-obsidian-service）
    - `obsidian_plugin_validate` —— 结构校验 + eslint-plugin-obsidianmd 检查
    - `obsidian_plugin_version` —— 三处版本同步
 
@@ -28,9 +30,22 @@
         │ 工具(bundle)             │ skill 发现
 ┌───────┴──────────────────────┐  ┌────────┴───────────────────┐
 │ @leelee592/dsh-obsidian-plugin │  │ obsidian-plugin skill（内置）  │
-│  8 tools, scaffold…version  │  │  SKILL.md + reference/*     │
+│  10 tools, scaffold…version │  │  SKILL.md + reference/*     │
 └─────────────────────────────┘  └─────────────────────────────┘
 ```
+
+## 验证档位
+
+四档，由浅到深；括号里是执行它的工具：
+
+| 档 | 含义 | 干扰 |
+| --- | --- | --- |
+| L1 静态 | 产物存在性、模块格式/导出/外部化检查、manifest↔产物一致性（在 `build` 内） | 无 |
+| L2 离线冒烟 | 在纯 Node 里用桩化的 Obsidian API 加载产物，真跑一遍生命周期（`test`） | 无 |
+| L3 用户的 Obsidian | 经 CLI 操作用户运行中的 App：`vault` / `reload` / `inspect` / `eval` | 会切换用户的窗口、抢焦点——只用于验证用户的真实环境 |
+| L4 沙箱 Obsidian | 独立配置目录 + 库副本的**独立 Obsidian** 跑项目自建的 WebdriverIO 套件（`e2e`） | 无——开发循环的默认档 |
+
+两条规则贯穿所有档位：**只允许修改会话工作区内创建的测试库**（用户自己的库是只读的，包括 CLI 侧的间接写入——`plugin:enable` / `unrestrict` 改写的是当前活动窗口那个库，工具会拒绝对非测试库执行）；**默认路径绝不切换用户的窗口、绝不抢焦点**。
 
 ## 目录结构
 
@@ -45,21 +60,29 @@
 │   ├── fs.ts             # 文件系统 seam：路径/target 双身份、sandboxPolicy、workspaceRoot
 │   ├── proc.ts           # spawnSync 封装：超时 + 结果分类
 │   ├── naming.ts         # 提交命名规则、占位符渲染、semver
-│   ├── build.ts          # obsidian_plugin_build：三级降级 + 静态自检
+│   ├── build.ts          # obsidian_plugin_build：入口/产物解析 + 构建三级 + 静态自检
+│   ├── lookup.ts         # 入口与产物的解析链（配置只扫描、不求值）
 │   ├── deploy.ts         # obsidian_plugin_deploy：vault 解析、产物安装、绑定写入
 │   ├── inspect.ts        # obsidian_plugin_inspect：只读观测 status/errors/console/dom/css
 │   ├── vault.ts          # obsidian_plugin_vault：库注册表、激活阶梯、confirm 闸门
 │   ├── reload.ts         # obsidian_plugin_reload：reload/enable/rescan/unrestrict + 加载校验
+│   ├── harness.ts        # obsidian_plugin_test：针对构建产物的离线冒烟（L2）
+│   ├── e2e.ts            # obsidian_plugin_e2e：沙箱化 E2E 脚手架（L4）
 │   ├── cli.ts            # obsidian CLI 调用：超时 + 按输出分类失败
 │   └── bundle-doc.ts     # 读取包内 doc/ 资源
 ├── test/
 │   ├── p0.test.ts        # node:test 跑在 lib/ 上（裸 Node，无需 harness）
-│   └── p1.test.ts        # node:test 跑在 lib/ 上：CLI 分类、eval 解析、argv、截断
+│   ├── p1.test.ts        # node:test 跑在 lib/ 上：CLI 分类、eval 解析、argv、截断
+│   ├── p2a.test.ts       # node:test 跑在 lib/ 上：入口/产物解析链
+│   ├── p2b.test.ts       # node:test 跑在 lib/ 上：离线冒烟 harness
+│   └── p2c.test.ts       # node:test 跑在 lib/ 上：e2e 脚手架
 ├── scripts/
 │   ├── link-dsh-deps.mjs # 链接 $DSH_HOME 的 @deepseek-ai 类型
 │   └── deploy.sh         # build + 注册工具 + dump-config 验证
 ├── assets/
 │   ├── templates/        # obsidian-sample-plugin 模板（14 个文件，含占位符）
+│   ├── harness/          # L2 离线冒烟用的 obsidian 桩与 scenario 装载器
+│   ├── e2e/              # obsidian_plugin_e2e 脚手架用的 WebdriverIO 模板（L4）
 │   └── skills/obsidian-plugin/  # 内置 skill（SKILL.md + reference/）
 ├── doc/                  # HARNESS 上下文 + 使用手册 + 版本说明
 ├── lib/                  # 构建产物（gitignore）
@@ -103,3 +126,9 @@ pnpm run deploy         # build + 注册进 profile + dump-config 验证
 - **状态存在于你的进程之外**：另一个应用会缓存它读到的东西，写文件不会让对方看见。在「已写入」和「对可见」之间插入一次显式重新索引，而不是留给调用者去发现。
 - **一次只暴露一层安全开关**：作用于某个作用域的安全设置（这里是逐库受限模式）绝不能成为其它操作顺带的副作用。给它独立动作，并写明后果与影响范围。
 - **依赖前台状态的步骤要一次做完**：如果某操作依赖外部焦点，就把需要它的步骤连续执行。用户在两次工具调用之间切一下应用，就可能让前一次的铺垫失效。
+- **不要写死项目的目录布局**：入口与产物目录是约定，不是事实。真实插件的入口有 `src/main.ts`、仓库根 `main.ts`、`src/plugin/main.ts` 等形态，产物可能落在项目根、测试库内或 `dir: '.'`。两者都要从项目自身的配置解析（显式参数 → 约定 → 配置 → `package.json`），失败时列出全部尝试过的位置，让调用方能行动而不是靠猜。
+- **只要存在配置就优先用项目自己的构建脚本**：打包配置可能带着我们无法从命令行补齐的插件（esbuild-svelte、esbuild-sass-plugin）。只有在没有配置可遵循、或调用方显式选择时才用我们自己的参数——并且此时必须警告「项目插件未被应用」。
+- **配置只扫描，绝不求值**：为了找 `outfile` / `outdir` 而读取打包配置时，不得执行项目代码，何况 `dev` 配置会进入 watch 模式。按文本解析。
+- **验证档位要标明，不要含混**：静态扫描、离线桩、沙箱实例与用户自己的 App 各自证明的东西不同。说明结论出自哪一档、可信度到哪里为止——桩环境不能证明运行期行为。
+- **要消除干扰，而不是把干扰压到最小**：当某项操作的代价是用户的注意力（切窗口、抢焦点），就用「独立实例 + 独立配置目录 + 数据副本」把它从根上消掉，而不是尽量少做。
+- **沙箱看不见别的进程做的写入**：`plugin:enable` / `unrestrict` 改写的是另一个 App 当前在前的那个库，任何文件级策略都拦不住。执行这类命令前先校验目标身份，并把可写集合限制在沙箱自己创建的东西上。

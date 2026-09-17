@@ -1,5 +1,31 @@
 [
   {
+    "version": "0.6.0",
+    "date": "2026-09-18",
+    "zh": {
+      "title": "验证四档：离线冒烟与沙箱化 E2E",
+      "items": [
+        "新增 obsidian_plugin_test（离线冒烟，L2 档）：在纯 Node 里用桩化的 Obsidian API 加载构建产物，真跑一遍生命周期——默认导出是 Plugin 子类、onload() 执行、注册动作发生、onunload() 清理、无未处理的 rejection，不需要安装 Obsidian。它会真实解析项目自身的 @codemirror/* 与 @lezer/*，DOM 相关插件可用项目自带的 jsdom；它不验证运行期行为：报告固定标注这是桩环境，并指向 inspect/e2e 做真实验证。",
+        "新增 obsidian_plugin_e2e（沙箱化端到端测试，L4 档）：init 用 WebdriverIO + wdio-obsidian-service 生成 wdio.conf.mts、tsconfig.e2e.json 与起始 spec（脚手架目录由 dir 指定，默认 e2e/），并加入 e2e / e2e:watch 脚本；它启动的独立 Obsidian 使用独立配置目录与库副本，因此不切用户窗口、不抢焦点。status 只报告现状与确切的安装命令，不写任何文件；runner 依赖留在用户项目里。",
+        "验证明确为四档，并写明了默认档：L1 静态（build 内置）、L2 离线冒烟（test，无需 Obsidian）、L3 用户自己的 Obsidian（vault / reload / inspect / eval，会切换窗口、抢焦点）、L4 沙箱 Obsidian（e2e）。日常开发循环默认走 L1 + L2 + L4；L4 档的存在意义就是让默认循环不再打扰用户——抢焦点原本来自我们自己调用 vault-open，沙箱实例用「独立实例 + 库副本」把它从根上消除，用户窗口全程不动。L3 只在需要验证用户真实环境时使用。",
+        "obsidian_plugin_build 的入口与产物改为从项目自身配置解析：入口按「显式 entry → src/main.ts → 仓库根 main.ts → 项目自身的 esbuild/rollup/vite 配置 → package.json main」，产物按「项目根 → 配置里的 outfile/outdir/file/dir → 项目内测试库布局 → 有界搜索（含 <dir>/.obsidian/plugins/<id>/）」，两者失败时都会列出全部尝试过的位置；新增 entry / outDir 参数。",
+        "构建层级优先级按实测修正：只要存在打包配置就优先跑项目自身的 production build 脚本——配置里带的插件（如 esbuild-svelte）无法从命令行补齐；项目本地 esbuild 直调只在没有配置可遵循、或显式选择非 production 时使用，并会警告未应用项目插件。",
+        "写入范围成为硬门禁：只允许修改会话工作区内创建的测试库，用户自己的库只读——包括沙箱拦不到的 CLI 侧间接写入（plugin:enable / unrestrict 改写的是当前活动窗口那个库），工具会拒绝对非测试库执行。默认路径绝不切换用户窗口、绝不抢焦点。"
+      ]
+    },
+    "en": {
+      "title": "Four verification tiers: offline smoke and sandboxed e2e",
+      "items": [
+        "New obsidian_plugin_test (offline smoke, tier L2): loads the built bundle in plain Node against a stubbed Obsidian API and exercises the real lifecycle — default export is a Plugin subclass, onload() runs, registrations happen, onunload() cleans up, no unhandled rejections — with no Obsidian installed. It resolves the project's own @codemirror/* and @lezer/* for real and can use the project's own jsdom for DOM-dependent plugins; it does not verify runtime behaviour, so the report always says it is a stub environment and points at inspect/e2e for real verification.",
+        "New obsidian_plugin_e2e (sandboxed end-to-end tests, tier L4): init generates wdio.conf.mts, tsconfig.e2e.json and a starting spec with WebdriverIO + wdio-obsidian-service (scaffold directory via dir, default e2e/), and adds the e2e / e2e:watch scripts; the Obsidian it launches uses an isolated config directory and a copy of the vault, so nothing switches the user's window or steals focus. status reports only what exists and the exact install command, writing nothing; the runner dependencies stay in the user's project.",
+        "Verification is now explicitly four tiers, with the default stated: L1 static (inside build), L2 offline smoke (test, no Obsidian needed), L3 the user's own Obsidian (vault / reload / inspect / eval — it switches the window and steals focus), L4 sandboxed Obsidian (e2e). The default development loop is L1 + L2 + L4, and the e2e tier exists so that the default loop never switches the user's window — the focus stealing came from our own vault-open calls, and a sandboxed instance with its own config directory and a copy of the vault removes it outright. L3 is used only when the user's real environment is the question.",
+        "obsidian_plugin_build now resolves its entry point and artifact from the project's own configuration: entry via explicit entry → src/main.ts → a repository-root main.ts → the project's own esbuild/rollup/vite config → package.json main, artifact via project root → the config's outfile/outdir/file/dir → the project-local vault layout → a bounded search that also probes <dir>/.obsidian/plugins/<id>/; both list every location tried on failure, and the new entry / outDir parameters pin either one.",
+        "Build tier precedence corrected by evidence: whenever a bundler config exists, the project's own production build script now runs first — a config can carry plugins (esbuild-svelte) that cannot be supplied from the command line; direct project-local esbuild is used only when there is no config to honour, or as an explicit non-production opt-out that warns the project's plugins were not applied.",
+        "Write scope is now a hard gate: only test vaults created inside the session workspace may be modified, and the user's own vaults are read-only — including CLI-side indirect writes the sandbox cannot see (plugin:enable / unrestrict rewrite whichever vault is in the active window), which the tools refuse to run against a non-test vault. The default path never switches the user's window or steals focus."
+      ]
+    }
+  },
+  {
     "version": "0.5.0",
     "date": "2026-09-16",
     "zh": {

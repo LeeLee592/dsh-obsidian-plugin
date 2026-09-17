@@ -11,13 +11,15 @@ Let DeepSeek Harness (DSH) agents reliably scaffold, build, deploy, live-verify,
 Two complementary, single-purpose parts:
 
 1. **Knowledge (skill)** — Obsidian plugin development guidelines (naming/submission rules, accessibility, code quality, submission & Scorecard). Derived from [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill), vendored into [assets/skills/obsidian-plugin](assets/skills/obsidian-plugin/SKILL.md) and registered as a runtime skill via `ctx.skills.register` in `apply()` (independent of project root).
-2. **Guardrails (tool bundle)** — this repo `@leelee592/dsh-obsidian-plugin` exposes 8 tools with typed schemas:
+2. **Guardrails (tool bundle)** — this repo `@leelee592/dsh-obsidian-plugin` exposes 10 tools with typed schemas:
    - `obsidian_plugin_scaffold` — generate a skeleton from the obsidian-sample-plugin template
-   - `obsidian_plugin_build` — bundle src/main.ts into a loadable main.js + static self-checks
+   - `obsidian_plugin_build` — bundle into a loadable main.js (entry + artifact resolved from the project's own config) + static self-checks
    - `obsidian_plugin_deploy` — install the built artifacts into a vault and enable the plugin id
    - `obsidian_plugin_inspect` — read-only observation of the running app (status / errors / console / dom / css / screenshot / trustCheck)
    - `obsidian_plugin_vault` — manage the vault used for live verification (status / ensure / close / prune)
    - `obsidian_plugin_reload` — make a change take effect and verify the plugin actually loaded
+   - `obsidian_plugin_test` — offline smoke test: load the built bundle in plain Node against a stubbed Obsidian API
+   - `obsidian_plugin_e2e` — scaffold sandboxed end-to-end tests (WebdriverIO + wdio-obsidian-service)
    - `obsidian_plugin_validate` — structural validation + eslint-plugin-obsidianmd checks
    - `obsidian_plugin_version` — sync versions across three files
 
@@ -28,9 +30,22 @@ Two complementary, single-purpose parts:
         │ tool bundle             │ skill discovery
 ┌───────┴──────────────────────┐  ┌────────┴───────────────────┐
 │ @leelee592/dsh-obsidian-plugin │  │ obsidian-plugin skill       │
-│  8 tools, scaffold…version  │  │  SKILL.md + reference/*     │
+│  10 tools, scaffold…version │  │  SKILL.md + reference/*     │
 └─────────────────────────────┘  └─────────────────────────────┘
 ```
+
+## Verification Tiers
+
+Four tiers, cheapest first; the tier in parentheses is what runs it:
+
+| Tier | Means | Interference |
+| --- | --- | --- |
+| L1 static | artifact existence, module format / export / external checks, manifest↔artifact consistency (in `build`) | none |
+| L2 offline smoke | the bundle is loaded in plain Node against a stubbed Obsidian API and the real lifecycle is exercised (`test`) | none |
+| L3 the user's Obsidian | the CLI drives the user's running app: `vault` / `reload` / `inspect` / `eval` | switches the user's window and steals focus — only for verifying the user's real environment |
+| L4 sandboxed Obsidian | a separate Obsidian with its own config directory and a copy of the vault runs the project's own WebdriverIO specs (`e2e`) | none — the default for the development loop |
+
+Two rules hold at every tier: **only test vaults created inside the session workspace may be modified** (the user's own vaults are read-only, including CLI-side writes — `plugin:enable` / `unrestrict` rewrite whichever vault is in the active window, so the tools refuse to run them against a non-test vault), and **the default path never switches the user's window or steals focus**.
 
 ## Directory Structure
 
@@ -45,21 +60,29 @@ Two complementary, single-purpose parts:
 │   ├── fs.ts             # fs seam: path/target duality, sandboxPolicy, workspaceRoot
 │   ├── proc.ts           # spawnSync wrapper: timeout + outcome classification
 │   ├── naming.ts         # submission naming rules, placeholder rendering, semver
-│   ├── build.ts          # obsidian_plugin_build: three-tier degradation + static checks
+│   ├── build.ts          # obsidian_plugin_build: entry/artifact resolution + three-tier build + static checks
+│   ├── lookup.ts         # entry-point + artifact resolution chains (configs scanned, never evaluated)
 │   ├── deploy.ts         # obsidian_plugin_deploy: vault resolution, artifacts, binding
 │   ├── inspect.ts        # obsidian_plugin_inspect: read-only status/errors/console/dom/css
 │   ├── vault.ts          # obsidian_plugin_vault: registry, activation ladder, confirm gate
 │   ├── reload.ts         # obsidian_plugin_reload: reload/enable/rescan/unrestrict + verify
+│   ├── harness.ts        # obsidian_plugin_test: offline smoke (L2) over the built bundle
+│   ├── e2e.ts            # obsidian_plugin_e2e: sandboxed e2e scaffold (L4)
 │   ├── cli.ts            # obsidian CLI runner: timeout + output-based failure classification
 │   └── bundle-doc.ts     # read bundled doc/ resources
 ├── test/
 │   ├── p0.test.ts        # node:test over lib/ (bare Node, no harness needed)
-│   └── p1.test.ts        # node:test over lib/: CLI classification, eval parsing, argv
+│   ├── p1.test.ts        # node:test over lib/: CLI classification, eval parsing, argv
+│   ├── p2a.test.ts       # node:test over lib/: entry/artifact resolution chains
+│   ├── p2b.test.ts       # node:test over lib/: offline smoke harness
+│   └── p2c.test.ts       # node:test over lib/: e2e scaffold
 ├── scripts/
 │   ├── link-dsh-deps.mjs # link $DSH_HOME @deepseek-ai types
 │   └── deploy.sh         # build + register tools + dump-config verify
 ├── assets/
 │   ├── templates/        # obsidian-sample-plugin template (14 files, placeholders)
+│   ├── harness/          # obsidian stub + scenario loader for the L2 offline smoke test
+│   ├── e2e/              # WebdriverIO templates scaffolded by obsidian_plugin_e2e (L4)
 │   └── skills/obsidian-plugin/  # built-in skill (SKILL.md + reference/)
 ├── doc/                  # HARNESS context + manuals + version notes
 ├── lib/                  # build output (gitignored)
@@ -103,3 +126,9 @@ Reusable rules:
 - **State lives outside your process**: another app caches what it read. Writing a file does not make the other side see it. Insert an explicit re-index between "written" and "visible" instead of leaving the caller to discover it.
 - **One safety switch at a time**: a per-scope security setting (here, per-vault restricted mode) is never a silent side effect of another operation. Give it its own explicit action that states the consequence and the blast radius.
 - **Do the foreground-sensitive steps in one sequence**: if an operation depends on external focus, run everything that needs it back-to-back. A user switching apps between two tool calls can invalidate the first one's setup.
+- **Never hardcode a project's layout**: the entry point and the artifact directory are conventions, not facts. Real plugins use `src/main.ts`, a repository-root `main.ts` or `src/plugin/main.ts`, and build into the project root, a test vault, or `dir: '.'`. Resolve both from the project's own configuration (explicit argument → convention → config → `package.json`), and on failure list every location tried so the caller can act instead of guessing.
+- **Prefer the project's own build script whenever a config exists**: a bundler config can carry plugins (esbuild-svelte, esbuild-sass-plugin) that no command line of ours can reproduce. Use our own flags only when there is no config to honour, or as an explicit opt-out — and warn then that the project's plugins were not applied.
+- **Scan configuration, never evaluate it**: reading a bundler config for `outfile` / `outdir` must not execute project code, and a `dev` config would enter watch mode. Parse the text.
+- **Label the verification tier instead of blurring it**: a static scan, an offline stub, a sandboxed instance and the user's own app prove different things. Say which tier produced a result and where its confidence ends — a stub environment does not prove runtime behaviour.
+- **Delete interference, do not budget it**: when the cost of an operation is the user's attention (a switched window, stolen focus), run it in a separate instance with its own configuration directory and a copy of the data. That removes the cost instead of minimizing it.
+- **The sandbox cannot see writes performed by another process**: `plugin:enable` / `unrestrict` rewrite whatever vault the other app has in front, so no file-level policy can catch them. Check the target's identity before running such a command, and keep the writable set to what the sandbox itself created.

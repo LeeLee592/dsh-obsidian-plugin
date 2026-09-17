@@ -1,6 +1,6 @@
 ---
 name: obsidian-plugin
-description: Guidelines for developing, validating, and submitting Obsidian community plugins. Covers plugin authoring best practices (memory management, type safety, UI/UX, file & vault operations, CSS, accessibility, code quality) and submission & validation (eslint-plugin-obsidianmd rules, community scanner, manifest/naming requirements). Use when working with Obsidian plugins, main.ts, manifest.json, Plugin class, or vault operations. Pair with the obsidian_plugin_scaffold, obsidian_plugin_build, obsidian_plugin_deploy, obsidian_plugin_inspect, obsidian_plugin_vault, obsidian_plugin_reload, obsidian_plugin_validate, and obsidian_plugin_version tools.
+description: Guidelines for developing, validating, and submitting Obsidian community plugins. Covers plugin authoring best practices (memory management, type safety, UI/UX, file & vault operations, CSS, accessibility, code quality) and submission & validation (eslint-plugin-obsidianmd rules, community scanner, manifest/naming requirements). Use when working with Obsidian plugins, main.ts, manifest.json, Plugin class, or vault operations. Pair with the obsidian_plugin_scaffold, obsidian_plugin_build, obsidian_plugin_test, obsidian_plugin_deploy, obsidian_plugin_e2e, obsidian_plugin_inspect, obsidian_plugin_vault, obsidian_plugin_reload, obsidian_plugin_validate, and obsidian_plugin_version tools.
 license: MIT
 metadata:
   version: 1.10.1
@@ -12,16 +12,18 @@ metadata:
 
 ## DSH Tools
 
-与本 skill 配套的八个确定性工具（参数由 DSH 调用时自行确认）：
+与本 skill 配套的十个确定性工具（参数由 DSH 调用时自行确认）：
 
 | 工具 | 用途 |
 |---|---|
 | `obsidian_plugin_scaffold` | 基于官方 obsidian-sample-plugin 模板生成合规插件骨架，内置命名/提交规则校验 |
-| `obsidian_plugin_build` | 把插件项目打包成可加载的 main.js（CommonJS，obsidian 外部化）并做静态自检；三级降级、绝不启动 watch，并报告实际使用的层级 |
+| `obsidian_plugin_build` | 把插件项目打包成可加载的 main.js（CommonJS，obsidian 外部化）并做静态自检（L1）；入口与产物从项目自身配置解析（`entry` / `outDir` 可显式指定，失败时列出全部尝试过的位置）；只要有打包配置就优先跑项目自身的 production `build` 脚本，否则本地 esbuild 直调；绝不启动 watch，并报告实际使用的层级 |
 | `obsidian_plugin_deploy` | 把构建产物装进 vault 的 .obsidian/plugins/<id>/ 并更新该库的 community-plugins.json，随后把 vault 记入 dsh.obsidian.json；written / enabled / active 三态分列报告 |
 | `obsidian_plugin_inspect` | 只读观测运行中的 App，绝不改动它：status 一次给出体检事实（App 版本、已注册的库、实际应答的库、该库受限模式、目标插件安装/启用/版本匹配、信任弹窗是否待确认），另有 errors / console / dom / css / screenshot / trustCheck |
 | `obsidian_plugin_vault` | 管理真机验证用的库：status 报告已注册的库、当前活动窗口与激活将要做什么；ensure 是两步确认（不带 confirm 只描述后果，confirm=true 才登记/打开该库，随后由 App 自证活动库并如实上报信任弹窗）；close（macOS）；prune 尚未实现 |
 | `obsidian_plugin_reload` | 让代码改动在运行中的 App 生效：reload / enable / disable / rescan（重扫插件清单索引：Obsidian 只在库加载时扫描一次插件目录）/ unrestrict（显式关闭该库受限模式，会重载窗口）；重载后校验插件是否真的注册进 App 并回报插件日志 |
+| `obsidian_plugin_test` | 离线冒烟（L2）：在纯 Node 里用桩化的 Obsidian API 加载构建产物，真跑一遍生命周期（默认导出是 Plugin 子类、onload() / onunload()、注册动作、无未处理 rejection）；不需要 Obsidian。**不验证运行期行为**：报告固定标注桩环境并指向 inspect/e2e；DOM 相关插件需要项目自带 jsdom |
+| `obsidian_plugin_e2e` | 脚手架化沙箱端到端测试（L4，零干扰）：init 写入 WebdriverIO + wdio-obsidian-service 配置（独立配置目录 + 库副本的独立 Obsidian，不切窗口、不抢焦点）并加入 e2e / e2e:watch 脚本；status 只报告现状与确切的安装命令、不写文件；runner 依赖留在项目里 |
 | `obsidian_plugin_validate` | 校验 manifest 必填字段、命名规则、versions.json 映射、package.json 版本一致性，并运行 eslint-plugin-obsidianmd 检查 |
 | `obsidian_plugin_version` | 同步 manifest.json / versions.json / package.json 三处版本 |
 
@@ -29,19 +31,26 @@ metadata:
 
 ## Workflow
 
+**默认循环走 L1 + L2 + L4（构建 → 离线冒烟 → 沙箱化 E2E），全程不切换用户窗口**；第 7 步的 CLI 档（L3）只在需要验证用户真实环境时使用。
+
 1. **脚手架** — 新建插件时调用 `obsidian_plugin_scaffold`（先确认 id/name/description 符合命名规则）。
 2. **实现** — 按「插件编写规范」编写功能代码。
-3. **构建** — 改完代码调用 `obsidian_plugin_build` 打包出 main.js 并跑静态自检；按返回的失败/警告修正后重跑。它只做一次性打包，不会启动 watch 进程。
-4. **部署** — 调用 `obsidian_plugin_deploy` 装进测试库（TestVault）并写入启用列表；注意这一步只表示文件已写入、已启用，**不验证运行中的 Obsidian 是否真的加载了插件**（是否加载交给下一步的真机验证）。
-5. **真机验证** — 先 `obsidian_plugin_vault action=ensure`（带 `confirm=true` 才会真正登记/打开）把测试库带到前台，再 `obsidian_plugin_reload` 重载并确认插件确实加载，最后用 `obsidian_plugin_inspect` 只读观测（status / errors / console / dom / css / screenshot）。
-6. **校验** — 调用 `obsidian_plugin_validate` 检查结构与命名并运行 eslint；按返回错误修正后重跑，直到通过。
-7. **版本** — 发布时调用 `obsidian_plugin_version` 统一升级版本号。
-8. **提交** — 按「校验与提交」表格完成社区扫描与发布准备。
+3. **构建** — 改完代码调用 `obsidian_plugin_build` 打包出 main.js 并跑 L1 静态自检；入口与产物会自动从项目自身配置解析（找不到时显式传 `entry` / `outDir`），按返回的失败/警告修正后重跑。它只做一次性打包，不会启动 watch 进程。
+4. **离线冒烟** — 调用 `obsidian_plugin_test` 在纯 Node 里用桩化的 Obsidian API 加载产物，秒级挡住「加载即崩」（L2，不需要 Obsidian）；它不验证运行期行为，这就是下一步存在的原因。
+5. **部署** — 调用 `obsidian_plugin_deploy` 装进测试库（TestVault）并写入启用列表；注意这一步只表示文件已写入、已启用，**不验证运行中的 Obsidian 是否真的加载了插件**（是否加载交给下一步的沙箱 E2E 或真机验证）。
+6. **沙箱化 E2E** — 首次用 `obsidian_plugin_e2e action=init` 在项目里接好 WebdriverIO + wdio-obsidian-service 套件，然后由项目自己跑 `pnpm run e2e`（L4）：独立 Obsidian 实例 + 独立配置目录 + 库副本，**不切用户窗口、不抢焦点**，是验证真实运行期行为的默认档；接入指引见 `reference/e2e-sandboxed.md`。
+7. **真机验证（L3，仅在需要验证用户真实环境时）** — 会切换窗口、抢焦点，必须显式确认：先 `obsidian_plugin_vault action=ensure`（带 `confirm=true` 才会真正登记/打开）把测试库带到前台，再 `obsidian_plugin_reload` 重载并确认插件确实加载，最后用 `obsidian_plugin_inspect` 只读观测（status / errors / console / dom / css / screenshot）。
+8. **校验** — 调用 `obsidian_plugin_validate` 检查结构与命名并运行 eslint；按返回错误修正后重跑，直到通过。
+9. **版本** — 发布时调用 `obsidian_plugin_version` 统一升级版本号。
+10. **提交** — 按「校验与提交」表格完成社区扫描与发布准备。
+
+写入范围是硬门禁：只允许修改工作区内创建的测试库，用户自己的库只读（包括 CLI 侧的间接写入——`plugin:enable` / `unrestrict` 改写的是活动窗口那个库，工具会拒绝对非测试库执行）。
 
 ## 症状 → 动作
 
 | 症状 | 先做什么 | 大概率原因 |
 |---|---|---|
+| 用户的窗口被反复切走 | 把循环切到沙箱化 E2E 档：`obsidian_plugin_e2e action=init` 后由项目跑 `pnpm run e2e`（L4） | L3 的 `plugin:*` / `dev:*` / `eval` 按活动窗口解析，观测前必须把库带到前台 |
 | 插件没出现在 Obsidian 里 | `obsidian_plugin_inspect action=status` | 库选错 / 该库处于受限模式 / 未重载 |
 | 装了但功能没生效 | `obsidian_plugin_inspect action=trustCheck` | 首次信任未确认，插件不会被加载 |
 | 改了代码没变化 | `obsidian_plugin_reload` | 未重载，旧 bundle 还在内存里 |
@@ -51,6 +60,9 @@ metadata:
 | `Command "x" not found` / `Plugin "x" not found` | 先把目标库带到前台（`obsidian_plugin_vault action=ensure confirm=true`） | 插件类命令按活动窗口解析 |
 | 刚读过 console 后 reload 卡住 | 先 detach 调试器（`inspect action=console` 不要留 `keepDebugger`） | 调试器附加与 `plugin:reload` 互斥 |
 | UI 与预期不符 | `obsidian_plugin_inspect action=dom / css / screenshot` | 选择器作用域、CSS 变量、无障碍 |
+| build 报 `entry point not found` | 显式传 `entry` | 真实插件的入口形态不一：`src/main.ts`、仓库根 `main.ts` 或 `src/plugin/main.ts` |
+| build 成功但找不到 main.js | 显式传 `outDir` | 真实插件的产物可能落在测试库内，或 `dir: '.'` |
+| 离线冒烟在加载阶段失败 | 读 `obsidian_plugin_test` 的报告 | 桩环境缺少浏览器全局；DOM 相关插件需要在项目里装 jsdom |
 | `require('obsidian')` 报错 | 检查构建是否把 obsidian 外部化 | obsidian 被打进了 bundle |
 
 ## 真机调试与观测
