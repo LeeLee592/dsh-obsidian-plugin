@@ -319,22 +319,60 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Warn when the app window cannot render what the caller expects to see.
+ *
+ * Obsidian renders nothing while a window is hidden or minimized, and a
+ * screenshot then captures a blank/empty document. A real session showed the
+ * consequence: the agent could not see its own UI, so it went looking for a way
+ * to force the window forward and settled on
+ * `electron.remote.getCurrentWindow().show()/focus()` — which is what stole the
+ * user's focus. Reporting the state up front is what prevents that detour.
+ */
+function renderStateWarning(cli: CliOptions): string | undefined {
+  const code = [
+    "(() => {",
+    '  const remote = require("electron").remote;',
+    "  if (!remote) return null;",
+    "  const w = remote.getCurrentWindow();",
+    "  return { visible: w.isVisible(), minimized: w.isMinimized(), focused: w.isFocused(), title: w.getTitle() };",
+    "})()",
+  ].join("\n");
+  const result = runCli(["eval", `code=${code}`], { ...cli, timeoutMs: 15_000, retries: 0 });
+  if (result.status !== "ok") return undefined;
+  const state = parseEvalJson(result.output);
+  if (!state) return undefined;
+  const problems: string[] = [];
+  if (state.visible === false) problems.push("window is hidden");
+  if (state.minimized === true) problems.push("window is minimized");
+  if (state.focused === false) problems.push("window is not focused");
+  if (!problems.length) return undefined;
+  return (
+    `! ${problems.join(", ")} — Obsidian renders nothing in that state, so this screenshot may be blank or show an off-screen layout. ` +
+    "Bring the window to the front yourself (obsidian_plugin_vault action=ensure confirm=true does it and says so), " +
+    "or verify the UI in a sandboxed instance (obsidian_plugin_e2e) where no window is involved. " +
+    "Do not force the window forward with electron.remote.show()/focus() — that takes the user's focus."
+  );
+}
+
 async function screenshot(fs: Fs, args: InspectArgs, call: FsCall, cli: CliOptions): Promise<string> {
   if (!args.path) return 'Error: action="screenshot" requires path=<absolute path inside the workspace>.';
   const target = await fs.resolve(args.path, call.workspaceRoot);
+  const warning = renderStateWarning(cli);
 
   const result = runCli(["dev:screenshot", `path=${target}`], cli);
 
   // The CLI is known to hang after Obsidian has already written the file, so a
   // timeout is resolved by looking at the filesystem rather than the status.
+  const withWarning = (text: string) => (warning ? `${text}\n${warning}` : text);
   if (result.status !== "ok") {
     if (await fs.exists(target)) {
-      return `Wrote ${target} (the CLI call did not return: ${result.detail ?? result.status}). Read it with the image tool.`;
+      return withWarning(`Wrote ${target} (the CLI call did not return: ${result.detail ?? result.status}). Read it with the image tool.`);
     }
     return explainCliFailure(result, `could not capture a screenshot to ${target}`);
   }
   if (!(await fs.exists(target))) {
-    return `Obsidian reported success but no file appeared at ${target} — check that the path is writable.`;
+    return withWarning(`Obsidian reported success but no file appeared at ${target} — check that the path is writable.`);
   }
-  return `Wrote ${target}. Read it with the image tool.`;
+  return withWarning(`Wrote ${target}. Read it with the image tool.`);
 }

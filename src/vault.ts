@@ -192,7 +192,31 @@ async function ensure(fs: Fs, args: VaultArgs, call: FsCall, cli: CliOptions): P
   }
 
   if (observed !== name) {
-    return `Asked Obsidian to open "${name}" (CLI returned ${opened.output.trim()}) but the app still reports "${observed ?? "unknown"}" as active. Check the Obsidian window.`;
+    // Live evidence (a real development session) showed exactly this: the IPC
+    // call returns true, but the target vault's window stays in the background
+    // and keeps rendering nothing — `vault-open` then answers "Vault already
+    // exists" instead of switching to it. The agent in that session worked
+    // around it by hand with electron.remote.show()/focus(); to save it that
+    // guesswork we do the same thing, once, and say plainly what happened.
+    const raised = raiseWindow(name, path, cli);
+    if (raised.raised) {
+      const confirmed = await confirmActive(name, cli);
+      if (confirmed) {
+        return [
+          `Vault "${name}" is now the active window.`,
+          "  ! note: its window was already open but in the background, so it had to be brought to the front",
+          "    — your focus moved to Obsidian. This is the one action in the tool set that does that.",
+          ...(raised.detail ? [`  detail: ${raised.detail}`] : []),
+        ].join("\n");
+      }
+    }
+    return [
+      `Asked Obsidian to open "${name}" (CLI returned ${opened.output.trim()}) but the app still reports "${observed ?? "unknown"}" as active.`,
+      ...(raised.detail ? [`  ! attempt to raise the existing window: ${raised.detail}`] : []),
+      "  The vault's window may be open but not rendering. Options:",
+      "    · In Obsidian: use the vault switcher and pick this vault",
+      "    · Or verify in a sandboxed instance instead (obsidian_plugin_e2e), which needs no window at all",
+    ].join("\n");
   }
 
   const trust = await pollTrust(cli);
@@ -254,6 +278,50 @@ export async function vaultAction(fs: Fs, args: VaultArgs, call: FsCall = {}, cl
     default:
       return `Error: unknown action "${action}".`;
   }
+}
+
+/** Poll until the app reports `name` as active, or give up. */
+async function confirmActive(name: string, cli: CliOptions, attempts = 5): Promise<boolean> {
+  for (let i = 0; i < attempts; i++) {
+    if (identity(cli).vault === name) return true;
+    await sleep(1500);
+  }
+  return false;
+}
+
+/**
+ * Bring an already-open vault window to the front.
+ *
+ * Obsidian's `vault-open` IPC switches vaults inside a window, and returns true
+ * even when the target window is merely hidden or unfocused — leaving the agent
+ * to stare at a vault whose window renders nothing. This uses electron.remote to
+ * raise the matching BrowserWindow, which is the only way to recover that state
+ * from outside. It moves the user's focus, so callers must report it.
+ */
+function raiseWindow(name: string, path: string, cli: CliOptions): { raised: boolean; detail?: string } {
+  const code = [
+    "(() => {",
+    '  const remote = require("electron").remote;',
+    "  if (!remote) return { raised: false, detail: 'electron.remote unavailable' };",
+    `  const wanted = ${JSON.stringify(name)};`,
+    `  const wantedPath = ${JSON.stringify(path)};`,
+    "  const wins = remote.BrowserWindow.getAllWindows();",
+    "  const match = wins.find((w) => {",
+    "    const title = (w.getTitle() || '');",
+    "    const url = (w.webContents && w.webContents.getURL && w.webContents.getURL()) || '';",
+    "    return title.includes(' - ' + wanted + ' - ') || url.includes(wantedPath);",
+    "  });",
+    "  if (!match) return { raised: false, detail: 'no window for ' + wanted + ' among ' + wins.length };",
+    "  if (match.isMinimized && match.isMinimized()) match.restore();",
+    "  match.show();",
+    "  match.focus();",
+    "  if (match.moveTop) match.moveTop();",
+    "  return { raised: true, detail: 'raised window: ' + match.getTitle() };",
+    "})()",
+  ].join("\n");
+  const result = runCli(["eval", `code=${code}`], { ...cli, timeoutMs: 25_000 });
+  if (result.status !== "ok") return { raised: false, detail: explainCliFailure(result, "could not raise the window") };
+  return { raised: /"raised":\s*true/.test(result.output), detail: result.output.trim().split("\n").pop() };
 }
 
 function sleep(ms: number): Promise<void> {
