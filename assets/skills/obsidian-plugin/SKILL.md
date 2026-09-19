@@ -57,6 +57,8 @@ metadata:
 | 部署成功，但 reload 说找不到插件 | `obsidian_plugin_reload action=rescan` | Obsidian 只在库加载时扫描一次插件目录，刚部署的插件不在清单里 |
 | 插件完全不加载 | 显式 `obsidian_plugin_reload action=unrestrict` | 该库处于受限模式；受限模式是逐库设置，只影响该库 |
 | 读数像是来自别的库 | 先 `obsidian_plugin_vault action=ensure`，再核对 `obsidian_plugin_inspect action=status` 报告的「实际应答库」 | 窗口级命令跟随当前活动窗口，`vault=` 并不可靠 |
+| 截图是空白 / 布局跑到屏幕外 | 看返回里的窗口渲染状态提示；用 `ensure confirm=true` 显式带到前台，或改用 `e2e` | 窗口被隐藏/最小化/未聚焦时 Obsidian 不渲染 |
+| 想让窗口自己弹到前台 | **不要**用 `electron.remote.*.show()/focus()` 强拉 | 会夺走用户鼠标焦点；只能用 `ensure`（会明说）或沙箱实例 |
 | `Command "x" not found` / `Plugin "x" not found` | 先把目标库带到前台（`obsidian_plugin_vault action=ensure confirm=true`） | 插件类命令按活动窗口解析 |
 | 刚读过 console 后 reload 卡住 | 先 detach 调试器（`inspect action=console` 不要留 `keepDebugger`） | 调试器附加与 `plugin:reload` 互斥 |
 | UI 与预期不符 | `obsidian_plugin_inspect action=dom / css / screenshot` | 选择器作用域、CSS 变量、无障碍 |

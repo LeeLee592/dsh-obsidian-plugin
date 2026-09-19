@@ -49,6 +49,8 @@ export interface InspectArgs {
   clear?: boolean;
   /** console: leave the debugger attached instead of detaching afterwards. */
   keepDebugger?: boolean;
+  /** status: list every registered vault instead of just counting them. */
+  all?: boolean;
 }
 
 /** Output caps so console noise cannot flood the model's context (DESIGN.md §4.10). */
@@ -177,6 +179,7 @@ async function status(fs: Fs, args: InspectArgs, call: FsCall, cli: CliOptions):
     activeVault = parsed?.vault;
     restricted = typeof parsed?.restricted === "boolean" ? parsed.restricted : undefined;
     facts.activeVault = activeVault;
+    if (ref.name) facts.targetVault = ref.name;
     facts.restricted = restricted;
     if (ref.name && activeVault && activeVault !== ref.name) {
       warnings.push(
@@ -188,8 +191,19 @@ async function status(fs: Fs, args: InspectArgs, call: FsCall, cli: CliOptions):
     warnings.push(explainCliFailure(identity, "could not confirm which vault answered"));
   }
 
+  // Noise control: a real session showed the full vault list (every vault the
+  // user ever registered) being printed on every status, drowning the two facts
+  // that matter — the target and who actually answered. The full list is now
+  // opt-in via `all: true`.
   const list = runCli(["vaults", "verbose"], cli);
-  if (list.status === "ok") facts.registeredVaults = list.output.replace(/\n/g, ", ");
+  if (list.status === "ok") {
+    const vaults = list.output
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (args.all) facts.registeredVaults = vaults.join(", ");
+    else facts.registeredVaults = `${vaults.length} registered (pass all=true to list them)`;
+  }
 
   const restrict = runCli(["plugins:restrict"], cli);
   if (restrict.status === "ok") facts.restrictedMode = restrict.output;
@@ -374,5 +388,10 @@ async function screenshot(fs: Fs, args: InspectArgs, call: FsCall, cli: CliOptio
   if (!(await fs.exists(target))) {
     return withWarning(`Obsidian reported success but no file appeared at ${target} — check that the path is writable.`);
   }
+
+  // Repeated captures to one fixed path silently overwrite each other, and a
+  // real session read the same screenshot five times without noticing. Byte-level
+  // dedup was tried and rejected (every capture differs at the byte level), so
+  // the guidance in reference/e2e-sandboxed.md carries that lesson instead.
   return withWarning(`Wrote ${target}. Read it with the image tool.`);
 }

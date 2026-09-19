@@ -1,5 +1,29 @@
 [
   {
+    "version": "0.7.0",
+    "date": "2026-09-19",
+    "zh": {
+      "title": "真机观测的失败上下文与窗口状态提示",
+      "items": [
+        "inspect status 降噪：默认只报目标库与「实际应答库」并给出已注册库数量，完整列表改为 all=true 时才输出。",
+        "reload 失败时直接带上「应答窗口的库是谁」，不必再为「命令为何 not found」额外排查一遍。",
+        "vault ensure 增加恢复能力：目标库窗口已打开却未渲染时，显式把该窗口带到前台并复检，同时明确告知「本次操作移动了你的焦点」；失败则列出可选做法。",
+        "inspect screenshot 先读窗口渲染状态：隐藏/最小化/未聚焦时直接说明截图可能是空白，并劝阻用 electron.remote 强拉窗口。",
+        "技能补充显式禁令与排障行：禁止用 remote.show()/focus() 抢焦点；截图请使用语义化且互不相同的路径。"
+      ]
+    },
+    "en": {
+      "title": "Failure context and window-state reporting for live observation",
+      "items": [
+        "inspect status is quieter: it reports the target vault, which vault actually answered, and a count of registered vaults; the full list is opt-in via all=true.",
+        "reload failures now name the vault the addressed window is showing, so \"why was the plugin not found\" no longer needs a separate investigation.",
+        "vault ensure can recover a vault window that is open but not rendering: it raises that window explicitly, re-confirms, and says plainly that it moved your focus; when that fails it lists the options.",
+        "inspect screenshot reads the window's render state first: when hidden, minimized or unfocused it says the capture may be blank and warns against forcing the window forward with electron.remote.",
+        "The skill gains an explicit prohibition (never force focus with remote.show()/focus()) and the habit of giving each screenshot a distinct, meaningful path."
+      ]
+    }
+  },
+  {
     "version": "0.6.0",
     "date": "2026-09-18",
     "zh": {

@@ -37,6 +37,23 @@ downloaded builds out of git.
 | Parallel runs | no | yes |
 | Placement | none | none |
 
+## Why the sandbox is worth the setup cost
+
+A real development session shows the alternative: the plugin could not be seen
+because its window was hidden, the agent worked around it by raising the window
+with `electron.remote` (forty times), and the user experienced that as the agent
+repeatedly stealing their focus mid-task. The sandbox renders normally with no
+window involved, so the temptation never arises.
+
+Two habits worth keeping regardless of tier:
+
+- **Give each screenshot a distinct, meaningful path** (e.g.
+  `screenshots/slash-menu-open.png`). Repeated captures to one fixed path
+  overwrite each other silently, and an agent in that session re-read the same
+  file five times believing it was new.
+- **Do not raise the Obsidian window to make a capture work.** If the window
+  cannot render, say so and switch tier.
+
 ## What it does not do
 
 - It does not replace the CLI. The CLI is still the fastest way to observe

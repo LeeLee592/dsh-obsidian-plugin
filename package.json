@@ -1,6 +1,6 @@
 {
   "name": "@leelee592/dsh-obsidian-plugin",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "packageManager": "pnpm@12.4.1",
   "description": "DeepSeek Harness tool plugin: scaffold, validate, and version Obsidian plugins.",
   "type": "module",

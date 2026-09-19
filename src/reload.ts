@@ -104,16 +104,27 @@ export async function reloadPlugin(args: ReloadArgs, deps: ReloadDeps = {}): Pro
       ].join("\n");
     }
     if (result.status !== "ok") {
+      // Window-scoped commands follow the ACTIVE window, and "not found" almost
+      // always means the wrong vault is in front. A real session had to run an
+      // extra command to discover that, so report who answered right here.
+      const active = activeWindowVault(cli);
       const reported = explainCliFailure(result, `could not reload "${pluginId}"`);
+      const context = active
+        ? [
+            `  addressed window answered from vault: "${active}"${args.vault && args.vault !== active ? ` (asked for "${args.vault}")` : ""}`,
+            active === args.vault ? "" : "  Window-scoped commands only reach the vault in front: obsidian_plugin_vault action=ensure confirm=true",
+          ].filter(Boolean)
+        : [];
       const restricted = restrictionProbe(args.vault, cli);
       if (restricted === true) {
         return [
           reported,
+          ...context,
           `  ! this vault is in restricted mode, so the CLI cannot address "${pluginId}" at all.`,
           "    Run the unrestricted activation (a security setting for this vault) or accept Obsidian's trust prompt.",
         ].join("\n");
       }
-      return reported;
+      return [reported, ...context].join("\n");
     }
 
     const lines = [`Reloaded ${pluginId} (Obsidian reported: ${result.output.trim()})`];
@@ -178,6 +189,13 @@ function debuggerHint(): boolean {
 }
 
 // ---- app-side helpers ------------------------------------------------------
+
+/** Which vault the addressed window is showing, for failure context. */
+function activeWindowVault(cli: CliOptions): string | undefined {
+  const result = runCli(["vault", "info=name"], { ...cli, retries: 0, timeoutMs: 12_000 });
+  return result.status === "ok" ? result.output.trim() : undefined;
+}
+
 
 function evalCode(vault: string | undefined, code: string, cli: CliOptions, timeoutMs?: number) {
   return runCli(withVault(vault, ["eval", `code=${code}`]), { ...cli, ...(timeoutMs ? { timeoutMs } : {}) });

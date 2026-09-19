@@ -370,6 +370,7 @@ export function apply(ctx: any, config: any) {
       path: { type: "string", description: "screenshot: absolute output path inside the workspace." },
       clear: { type: "boolean", description: "errors/console: clear the buffer after reading." },
       keepDebugger: { type: "boolean", description: "console: leave the capture debugger attached (read it later, but plugin:reload will hang until it is detached)." },
+      all: { type: "boolean", description: "status: list every registered vault instead of just counting them." },
     },
     output: textOutput,
     async execute(args: any, exec: any) {

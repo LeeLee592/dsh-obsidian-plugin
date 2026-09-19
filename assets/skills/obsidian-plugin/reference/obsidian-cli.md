@@ -91,6 +91,30 @@ obsidian eval code='app.plugins.loadManifests()'
 | `Vault not found.` | `vault=` names a vault Obsidian does not know | Register it by opening the folder once |
 | Everything fails after restarting the app | macOS CLI registration can be lost | Re-enable "Command line interface" in Settings → General |
 
+## Never force the window forward
+
+Do not use `electron.remote.getCurrentWindow().show()`, `.focus()`, `moveTop()`,
+`BrowserWindow` construction or any similar call to make Obsidian come to the
+front. It takes the user's mouse focus away from whatever they were doing, and
+because it is invisible in the tool output, the user experiences it as the agent
+randomly stealing their screen. A real session did exactly this — forty such
+calls — and the agent later diagnosed it itself as "my debugging method, not the
+plugin".
+
+The state that tempts you into it: a vault window that is open but hidden,
+minimized or unfocused **renders nothing**, so a screenshot comes back blank or
+shows an off-screen layout, and it is easy to conclude the window "needs" to be
+raised. Two supported ways out instead:
+
+- `obsidian_plugin_vault action=ensure confirm=true` — brings the target vault
+  forward deliberately and says in its output that it moved your focus. Only you
+  can do this knowingly.
+- `obsidian_plugin_e2e` — a sandboxed instance renders normally without any
+  window at all, so no focus is involved.
+
+`obsidian_plugin_inspect action=screenshot` reports the window's render state
+when it cannot render, so a blank image is explained rather than mysterious.
+
 ## The features the tools already wrap
 
 Prefer the tools; they encode the rules above. Reach for raw commands when you
