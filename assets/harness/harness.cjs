@@ -23,6 +23,7 @@
 const Module = require("node:module");
 const { createRequire } = require("node:module");
 const { existsSync, readFileSync, copyFileSync, rmSync } = require("node:fs");
+const { tmpdir } = require("node:os");
 const { dirname, join, resolve } = require("node:path");
 const { createObsidianStub, createStubElement } = require("./obsidian-stub.cjs");
 
@@ -93,11 +94,12 @@ const PEER_MODULES = [
 ];
 
 function parseArgs(argv) {
-  const out = { projectDir: undefined, bundle: undefined, scenario: undefined };
+  const out = { projectDir: undefined, bundle: undefined, scenario: undefined, tempDir: undefined };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--bundle") out.bundle = argv[++i];
     else if (arg === "--scenario") out.scenario = argv[++i];
+    else if (arg === "--temp-dir") out.tempDir = argv[++i];
     else if (!out.projectDir) out.projectDir = arg;
   }
   return out;
@@ -213,16 +215,33 @@ async function main() {
 
   let PluginClass;
   let instance;
+  let stagedCopy;
   try {
     // ---- 4. load ---------------------------------------------------------
     let module;
     let tempCopy;
     try {
       // A project with `"type": "module"` would make Node treat main.js as ESM,
-      // while every bundler emits CommonJS for Obsidian. Copying to a .cjs
-      // sibling pins the interpretation to what Obsidian actually does.
-      tempCopy = join(dirname(bundlePath), `.harness-${Date.now()}.cjs`);
-      copyFileSync(bundlePath, tempCopy);
+      // while every bundler emits CommonJS for Obsidian. Copying to a .cjs file
+      // pins the interpretation to what Obsidian actually does.
+      //
+      // The copy goes to a caller-provided writable directory, NOT next to the
+      // bundle: the plugin project commonly lives outside the DSH session
+      // workspace, where writing is denied (observed as EPERM on a real run).
+      const copyDirs = [args.tempDir, tmpdir(), dirname(bundlePath)].filter(Boolean);
+      let lastError;
+      for (const dir of copyDirs) {
+        const candidate = join(dir, `.dsh-harness-${process.pid}-${Date.now()}.cjs`);
+        try {
+          copyFileSync(bundlePath, candidate);
+          tempCopy = candidate;
+          break;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      if (!tempCopy) throw lastError ?? new Error("could not stage the bundle in any writable directory");
+      stagedCopy = tempCopy;
       module = require(tempCopy);
     } catch (error) {
       if (tempCopy) rmSync(tempCopy, { force: true });
@@ -285,6 +304,56 @@ async function main() {
       check("registers a command, view or setting tab", "warn", true);
     }
 
+    // Registration is not execution. An editor extension only does its work
+    // when CodeMirror instantiates it inside a real EditorView, so a plugin
+    // whose UI lives there is NOT exercised by loading it — and a bare "PASS"
+    // invites exactly that misreading. Probe it and say so.
+    const extensions = app.workspace.editorExtensions.flatMap((entry) => (Array.isArray(entry) ? entry : [entry]));
+    // Two shapes reach the workspace: a raw class, or the extension object that
+    // `ViewPlugin.fromClass()` returns (which carries `create`). Both can be
+    // instantiated against a stub view, which is what actually runs the plugin's
+    // view/UI code — the part a plain "load" never touches.
+    const viewPlugins = extensions.filter(
+      (ext) => (ext && typeof ext.create === "function") || (typeof ext === "function" && /^\s*class\b/.test(Function.prototype.toString.call(ext))),
+    );
+    if (viewPlugins.length > 0 && !dom) {
+      // Instantiating a view with no DOM can only fail on `document`, which
+      // would be an environment gap misreported as a plugin defect.
+      result.viewPluginsRegistered = viewPlugins.length;
+      warn(
+        `editor view plugin(s) instantiate (0/${viewPlugins.length})`,
+        "not checkable offline: no DOM host, and an editor view needs one — add jsdom to the plugin project (`pnpm add -D jsdom`) to cover the UI code",
+      );
+    } else if (viewPlugins.length > 0) {
+      for (const ext of viewPlugins) {
+        try {
+          const value = typeof ext.create === "function" ? ext.create(stubView()) : ext(stubView());
+          if (value && typeof value.destroy === "function") {
+            try {
+              value.destroy();
+            } catch {
+              /* a view that cannot tear down is reported below by the unload check */
+            }
+          }
+          result.viewPluginsRun = (result.viewPluginsRun ?? 0) + 1;
+        } catch (error) {
+          const gap = environmentGapDetail(error);
+          if (!gap) result.viewPluginsFailed = [...(result.viewPluginsFailed ?? []), firstLine(error && error.message)];
+        }
+      }
+      result.viewPluginsRegistered = viewPlugins.length;
+      if (result.viewPluginsRun > 0) {
+        check(`editor view plugin(s) instantiate (${result.viewPluginsRun}/${viewPlugins.length})`, "warn", true);
+      } else if (result.viewPluginsFailed && result.viewPluginsFailed.length) {
+        fail("editor view plugin(s) instantiate", result.viewPluginsFailed[0]);
+      }
+    } else if (result.registrations.some((r) => r === "registerEditorExtension")) {
+      warn(
+        "editor extension body executed",
+        "the plugin registers an editor extension, but nothing in it ran — its UI code is NOT covered by this smoke test",
+      );
+    }
+
     // ---- unload ----------------------------------------------------------
     try {
       await instance.onunload();
@@ -314,6 +383,7 @@ async function main() {
   } finally {
     await new Promise((r) => setTimeout(r, 25)); // let queued rejections surface
     finish();
+    if (stagedCopy) rmSync(stagedCopy, { force: true });
     console.log = originalConsole.log;
     console.warn = originalConsole.warn;
     console.error = originalConsole.error;
@@ -347,6 +417,24 @@ async function main() {
     }
     emit(result, result.ok ? 0 : 1);
   }
+}
+
+/** Minimal CodeMirror EditorView stand-in for instantiating a ViewPlugin. */
+function stubView() {
+  return {
+    dom: document.createElement("div"),
+    contentDOM: document.createElement("div"),
+    state: { doc: { lines: 1, length: 0, line: () => ({ from: 0, to: 0, text: "", number: 1 }), toString: () => "" }, selection: { main: { from: 0, to: 0 } }, field: () => undefined },
+    dispatch() {},
+    focus() {},
+    requestMeasure() {},
+    coordsAtPos: () => null,
+    posAtDOM: () => 0,
+    posAtCoords: () => null,
+    viewport: { from: 0, to: 0 },
+    visibleRanges: [],
+    plugin: () => undefined,
+  };
 }
 
 /** Obsidian's `moment`, taken from the stub so both surfaces agree. */
@@ -448,6 +536,9 @@ function environmentGapDetail(error) {
   }
   if (/not implemented in the offline stub/i.test(message)) {
     return `not checkable offline: the bundle needs an API the stub does not model (${message})`;
+  }
+  if (/\b(document|window|navigator|HTMLElement)\b is not defined/.test(message)) {
+    return `not checkable offline: no DOM host was available (${message}) — add jsdom to the plugin project to cover this path`;
   }
   return undefined;
 }

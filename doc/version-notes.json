@@ -1,5 +1,27 @@
 [
   {
+    "version": "0.7.1",
+    "date": "2026-09-19",
+    "zh": {
+      "title": "离线冒烟：修复工作区外项目的沙箱拒绝，并让覆盖范围可见",
+      "items": [
+        "修复：harness 为绕过 \"type\":\"module\" 而把产物复制成同目录的 .cjs，当插件项目位于会话工作区之外时会被沙箱拒绝（EPERM），导致 obsidian_plugin_test 对这类项目直接失败；现在改为复制到可写临时目录。",
+        "新增探测：注册的编辑器视图插件会被实例化一次，因此以 UI 为主要功能的插件，其视图/界面代码现在能被离线覆盖（需项目自带 jsdom）。",
+        "结论文案按实际情况区分：无 DOM 宿主时明确写出「注册为编辑器扩展的 UI 代码未被检验」，不再让 PASS 被误读为 UI 已验证。",
+        "环境缺口（缺少 DOM、桩未建模的 API）不再被误报为插件缺陷。"
+      ]
+    },
+    "en": {
+      "title": "Offline smoke: fix the sandbox denial for out-of-workspace projects, and make coverage visible",
+      "items": [
+        "Fix: to sidestep \"type\":\"module\" the harness copied the bundle to a .cjs file next to it, which the sandbox refuses when the plugin project lives outside the session workspace (EPERM) — obsidian_plugin_test failed outright for such projects. It now stages the copy in a writable temp directory.",
+        "New probe: registered editor view plugins are instantiated once, so a plugin whose feature is its UI now gets that view/UI code covered offline (requires jsdom in the project).",
+        "The conclusion is stated per run: without a DOM host it says plainly that UI code registered as an editor extension was NOT exercised, so a PASS cannot be misread as verified UI.",
+        "Environment gaps (missing DOM, an API the stub does not model) are no longer reported as plugin defects."
+      ]
+    }
+  },
+  {
     "version": "0.7.0",
     "date": "2026-09-19",
     "zh": {

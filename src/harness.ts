@@ -69,7 +69,7 @@ export function renderSmokeReport(result: HarnessResult, humanOutput: string): s
       head,
       body,
       ...rest,
-      OFFLINE_NOTE,
+      offlineNote(result),
       failed.length ? "" : humanOutput,
     ]
       .filter((line) => line !== undefined)
@@ -91,13 +91,28 @@ export function renderSmokeReport(result: HarnessResult, humanOutput: string): s
   if (consoleErrors.length) {
     lines.push(`  ! ${consoleErrors.length} console.error during the run, first: ${consoleErrors[0].text.slice(0, 200)}`);
   }
-  lines.push(OFFLINE_NOTE);
+  lines.push(offlineNote(result));
   return lines.join("\n");
 }
 
-const OFFLINE_NOTE =
-  "Note: offline stub environment, NOT the real app — this only proves the bundle loads, registers and unloads.\n" +
-  "      Runtime behaviour still needs obsidian_plugin_inspect / obsidian_plugin_e2e against a real Obsidian.";
+/**
+ * The limit, stated per run rather than as boilerplate.
+ *
+ * With no DOM host the reach really is "loads, registers, unloads"; a DOM host
+ * additionally runs the registered view plugins, which is where a plugin whose
+ * feature is its UI actually lives. Saying the same thing in both cases would
+ * understate the second and, worse, let the first read as if the UI had been
+ * checked.
+ */
+function offlineNote(result: HarnessResult): string {
+  const head = result.dom
+    ? "Note: offline stub environment, NOT the real app — this proves the bundle loads, registers, unloads,"
+    : "Note: offline stub environment, NOT the real app — this only proves the bundle loads, registers and unloads.";
+  const middle = result.dom
+    ? "\n      and that the registered view plugins can be constructed against a stub view. Rendering, events and"
+    : "\n      UI code registered as an editor extension was NOT exercised: no DOM host was available.";
+  return `${head}${middle}\n      everything that needs a real editor still needs obsidian_plugin_inspect / obsidian_plugin_e2e.`;
+}
 
 export async function testPlugin(fs: Fs, args: TestArgs, call: FsCall = {}): Promise<string> {
   const projectDir = await fs.resolve(args.projectDir, call.workspaceRoot);
@@ -133,7 +148,7 @@ export async function testPlugin(fs: Fs, args: TestArgs, call: FsCall = {}): Pro
     return [
       `Smoke test: FAIL — the harness did not finish within ${(args.timeoutMs ?? 120_000) / 1000}s.`,
       "A plugin that never settles during load is a real finding; if it is intentional, raise timeoutMs.",
-      OFFLINE_NOTE,
+      offlineNote({ ok: false, dom: false, checks: [], summary: "" }),
     ].join("\n");
   }
 
@@ -142,7 +157,7 @@ export async function testPlugin(fs: Fs, args: TestArgs, call: FsCall = {}): Pro
     return [
       "Smoke test: FAIL — the harness produced no result.",
       result.output ? `Harness output:\n${result.output}` : "(no output)",
-      OFFLINE_NOTE,
+      offlineNote({ ok: false, dom: false, checks: [], summary: "" }),
     ].join("\n");
   }
   return renderSmokeReport(parsed, (result.stdout ?? "").trim());
