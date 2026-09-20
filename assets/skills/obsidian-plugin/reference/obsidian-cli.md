@@ -79,6 +79,25 @@ until the app re-reads the directory:
 obsidian eval code='app.plugins.loadManifests()'
 ```
 
+## Wrapping the CLI by hand
+
+Before reaching for bash, check whether `obsidian_plugin_eval` answers the
+question — it carries the timeout, the retry and the error classification that a
+hand-rolled wrapper has to reimplement. Two sessions analysed for this project
+show the cost of not doing that: the agent built its own wrapper and spent a
+large share of its calls on plumbing.
+
+If you do need raw commands, note that **macOS ships no `timeout(1)`** (it is GNU
+coreutils; `gtimeout` exists only with Homebrew). Two portable forms:
+
+```sh
+perl -e 'alarm 20; exec @ARGV' -- obsidian "$@"     # no dependencies
+( "$@" & p=$!; sleep 20; kill -9 $p 2>/dev/null )   # pure shell
+```
+
+Both must kill the child rather than only stop waiting: a hung CLI keeps its IPC
+socket otherwise.
+
 ## Known failure modes
 
 | Symptom | Cause | Recovery |

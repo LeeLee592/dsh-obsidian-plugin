@@ -12,6 +12,7 @@ import { vaultAction } from "./vault.js";
 import { reloadPlugin } from "./reload.js";
 import { testPlugin } from "./harness.js";
 import { e2eAction } from "./e2e.js";
+import { evalInApp, focusWarning } from "./eval.js";
 import {
   isSemver,
   namingProblems,
@@ -50,6 +51,7 @@ export { vaultAction, registryPath, readRegistry, type VaultAction, type VaultAr
 export { reloadPlugin, type ReloadAction, type ReloadArgs } from "./reload.js";
 export { testPlugin, parseHarnessOutput, renderSmokeReport, type TestArgs } from "./harness.js";
 export { e2eAction, renderTemplate, pluginDirFor, type E2eAction, type E2eArgs } from "./e2e.js";
+export { evalInApp, focusWarning, type EvalArgs } from "./eval.js";
 
 // ---- version notes / HARNESS context (external doc/ shipped with the package) ----
 
@@ -79,7 +81,8 @@ export function getVersionNotes(lang: "zh" | "en" = "zh"): string {
 }
 
 const HARNESS_FALLBACK =
-  "# HARNESS · 会话上下文\n你带「Obsidian 插件开发」能力：obsidian_plugin_scaffold / obsidian_plugin_build / obsidian_plugin_deploy / obsidian_plugin_validate / obsidian_plugin_version。";
+  "# HARNESS · 会话上下文\n你带「Obsidian 插件开发」能力：obsidian_plugin_scaffold / build / deploy / test / e2e / inspect / vault / reload / eval / validate / version（共 11 个工具）。" +
+  "\n默认循环走 L1+L2+L4 不切用户窗口；改了界面必须真正看到（e2e 或 inspect screenshot），test 的 PASS 不等于 UI 已验收。";
 
 export const HARNESS_CONTEXT = readBundleDoc("harness.default.md", HARNESS_FALLBACK);
 
@@ -448,6 +451,21 @@ export function apply(ctx: any, config: any) {
       // Point the sandbox at wherever this project actually builds.
       const artifact = await resolveArtifact(fs, projectDir, { pluginId: manifest?.id });
       return e2eAction(fs, args, call, artifact.ok ? artifact.resolution.dir : undefined);
+    },
+  }));
+
+  ctx.tools.register(defineTool({
+    name: "obsidian_plugin_eval",
+    description: "Run JavaScript inside the running Obsidian app and return the result — the live-state escape hatch. Use it to read what the app really holds (plugin instances, workspace, metadataCache), to drive an interaction, or to try a fix without rebuilding. This is the only high-privilege tool: it executes code in the user's app, so it is approval-gated and the executed code is echoed back in the result. Prefer obsidian_plugin_inspect (free, no approval) whenever a read-only action can answer the question.",
+    parameters: {
+      code: { type: "string", required: true, description: "JavaScript to evaluate in the app context, for example Object.keys(app.plugins.plugins). It runs as-is, so keep it side-effect free unless the task needs otherwise; the executed code is echoed back in the result." },
+      vault: { type: "string", description: "Target vault name to address the CLI; window-scoped like every plugin/dev command." },
+      timeoutMs: { type: "number", description: "Timeout in ms for long expressions (default 30000)." },
+    },
+    output: textOutput,
+    async execute(args: any, exec: any) {
+      const call = makeCall(exec);
+      return evalInApp(args, { signal: call.signal });
     },
   }));
 

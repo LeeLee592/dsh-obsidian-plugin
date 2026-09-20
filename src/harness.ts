@@ -39,6 +39,10 @@ interface HarnessResult {
   peerModules?: string[];
   pluginId?: string;
   registrations?: string[];
+  /** How many registered view plugins could be instantiated (0 when no DOM host). */
+  viewPluginsRun?: number;
+  viewPluginsRegistered?: number;
+  viewPluginsFailed?: string[];
   console?: Array<{ level: string; text: string }>;
   scenario?: string;
   checks: HarnessCheck[];
@@ -111,7 +115,12 @@ function offlineNote(result: HarnessResult): string {
   const middle = result.dom
     ? "\n      and that the registered view plugins can be constructed against a stub view. Rendering, events and"
     : "\n      UI code registered as an editor extension was NOT exercised: no DOM host was available.";
-  return `${head}${middle}\n      everything that needs a real editor still needs obsidian_plugin_inspect / obsidian_plugin_e2e.`;
+  const next = result.viewPluginsRegistered
+    ? "\nNext: this run registered view plugin(s). If your change touched the UI, a PASS here is NOT acceptance — " +
+      "see it in a running app (obsidian_plugin_e2e, or obsidian_plugin_inspect action=screenshot), because the stub has no editor."
+    : "\nNext: for anything that needs a real editor or the real vault, use obsidian_plugin_e2e (sandboxed, no window) " +
+      "or obsidian_plugin_inspect against a running app.";
+  return `${head}${middle}${next}`;
 }
 
 export async function testPlugin(fs: Fs, args: TestArgs, call: FsCall = {}): Promise<string> {

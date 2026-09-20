@@ -268,6 +268,7 @@ test("the plugin registers every tool through the real defineTool validator", as
     "obsidian_plugin_build",
     "obsidian_plugin_deploy",
     "obsidian_plugin_e2e",
+    "obsidian_plugin_eval",
     "obsidian_plugin_inspect",
     "obsidian_plugin_reload",
     "obsidian_plugin_scaffold",

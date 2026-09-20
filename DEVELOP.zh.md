@@ -11,7 +11,7 @@
 两个互补、职责单一的部分：
 
 1. **知识（skill）**——Obsidian 插件开发规范（命名/提交规则、无障碍、代码质量、提交与 Scorecard）。源自 [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill)，内置为 [assets/skills/obsidian-plugin](assets/skills/obsidian-plugin/SKILL.md)，并在 `apply()` 里通过 `ctx.skills.register` 注册为 runtime skill（不依赖 project root）。
-2. **护栏（tool bundle）**——本仓库 `@leelee592/dsh-obsidian-plugin`，用 typed schema 暴露 10 个工具，把确定性操作封装起来：
+2. **护栏（tool bundle）**——本仓库 `@leelee592/dsh-obsidian-plugin`，用 typed schema 暴露 11 个工具，把确定性操作封装起来：
    - `obsidian_plugin_scaffold` —— 复用 obsidian-sample-plugin 模板生成骨架
    - `obsidian_plugin_build` —— 打包成可加载的 main.js（入口与产物从项目自身配置解析）+ 静态自检
    - `obsidian_plugin_deploy` —— 把构建产物装进 vault 并启用插件 id
@@ -20,6 +20,7 @@
    - `obsidian_plugin_reload` —— 让改动在运行中的 App 生效，并校验插件确实加载
    - `obsidian_plugin_test` —— 离线冒烟：在纯 Node 里用桩化的 Obsidian API 加载构建产物
    - `obsidian_plugin_e2e` —— 脚手架化沙箱端到端测试（WebdriverIO + wdio-obsidian-service）
+   - `obsidian_plugin_eval` —— 在运行中的 App 里执行 JavaScript（唯一的高特权工具：需审批、回显执行的代码、代码触及窗口焦点时警告）
    - `obsidian_plugin_validate` —— 结构校验 + eslint-plugin-obsidianmd 检查
    - `obsidian_plugin_version` —— 三处版本同步
 
@@ -30,7 +31,7 @@
         │ 工具(bundle)             │ skill 发现
 ┌───────┴──────────────────────┐  ┌────────┴───────────────────┐
 │ @leelee592/dsh-obsidian-plugin │  │ obsidian-plugin skill（内置）  │
-│  10 tools, scaffold…version │  │  SKILL.md + reference/*     │
+│  11 tools, scaffold…version │  │  SKILL.md + reference/*     │
 └─────────────────────────────┘  └─────────────────────────────┘
 ```
 
@@ -41,11 +42,15 @@
 | 档 | 含义 | 干扰 |
 | --- | --- | --- |
 | L1 静态 | 产物存在性、模块格式/导出/外部化检查、manifest↔产物一致性（在 `build` 内） | 无 |
-| L2 离线冒烟 | 在纯 Node 里用桩化的 Obsidian API 加载产物，真跑一遍生命周期（`test`） | 无 |
+| L2 离线冒烟 | 在纯 Node 里用桩化的 Obsidian API 加载产物，真跑一遍生命周期（`test`），报告会点名本次没有覆盖什么 | 无 |
 | L3 用户的 Obsidian | 经 CLI 操作用户运行中的 App：`vault` / `reload` / `inspect` / `eval` | 会切换用户的窗口、抢焦点——只用于验证用户的真实环境 |
 | L4 沙箱 Obsidian | 独立配置目录 + 库副本的**独立 Obsidian** 跑项目自建的 WebdriverIO 套件（`e2e`） | 无——开发循环的默认档 |
 
+档位表使用短名：`vault` / `reload` / `inspect` / `eval` 即同名的 `obsidian_plugin_*` 工具。
+
 两条规则贯穿所有档位：**只允许修改会话工作区内创建的测试库**（用户自己的库是只读的，包括 CLI 侧的间接写入——`plugin:enable` / `unrestrict` 改写的是当前活动窗口那个库，工具会拒绝对非测试库执行）；**默认路径绝不切换用户的窗口、绝不抢焦点**。
+
+**检查通过不等于验收。** `build` 成功、离线冒烟的 PASS 只证明产物能在桩环境里加载——既不证明插件可用，也不证明 UI 已验证：桩环境没有编辑器。只要改动涉及界面、渲染或交互，就必须真正看到它——沙箱档（`e2e`）或对着运行中的 App（`inspect action=screenshot`）——并在回复里说明看到了什么。这条规则来自真实任务：一次纯粹改 UI 的改动，build + test 全绿就被当成完成，且从未部署，用户什么也没看到。
 
 ## 目录结构
 
@@ -68,6 +73,7 @@
 │   ├── reload.ts         # obsidian_plugin_reload：reload/enable/rescan/unrestrict + 加载校验
 │   ├── harness.ts        # obsidian_plugin_test：针对构建产物的离线冒烟（L2）
 │   ├── e2e.ts            # obsidian_plugin_e2e：沙箱化 E2E 脚手架（L4）
+│   ├── eval.ts           # obsidian_plugin_eval：在运行中的 App 执行 JS（必审）
 │   ├── cli.ts            # obsidian CLI 调用：超时 + 按输出分类失败
 │   └── bundle-doc.ts     # 读取包内 doc/ 资源
 ├── test/
@@ -75,7 +81,8 @@
 │   ├── p1.test.ts        # node:test 跑在 lib/ 上：CLI 分类、eval 解析、argv、截断
 │   ├── p2a.test.ts       # node:test 跑在 lib/ 上：入口/产物解析链
 │   ├── p2b.test.ts       # node:test 跑在 lib/ 上：离线冒烟 harness
-│   └── p2c.test.ts       # node:test 跑在 lib/ 上：e2e 脚手架
+│   ├── p2c.test.ts       # node:test 跑在 lib/ 上：e2e 脚手架
+│   └── p3.test.ts        # node:test 跑在 lib/ 上：eval 护栏
 ├── scripts/
 │   ├── link-dsh-deps.mjs # 链接 $DSH_HOME 的 @deepseek-ai 类型
 │   └── deploy.sh         # build + 注册工具 + dump-config 验证
@@ -132,3 +139,4 @@ pnpm run deploy         # build + 注册进 profile + dump-config 验证
 - **验证档位要标明，不要含混**：静态扫描、离线桩、沙箱实例与用户自己的 App 各自证明的东西不同。说明结论出自哪一档、可信度到哪里为止——桩环境不能证明运行期行为。
 - **要消除干扰，而不是把干扰压到最小**：当某项操作的代价是用户的注意力（切窗口、抢焦点），就用「独立实例 + 独立配置目录 + 数据副本」把它从根上消掉，而不是尽量少做。
 - **沙箱看不见别的进程做的写入**：`plugin:enable` / `unrestrict` 改写的是另一个 App 当前在前的那个库，任何文件级策略都拦不住。执行这类命令前先校验目标身份，并把可写集合限制在沙箱自己创建的东西上。
+- **验收是「亲眼看到」，不是「检查通过」**：build 全绿、桩环境冒烟 PASS 只证明产物能加载，仅此而已——桩环境没有编辑器，证明不了可见改动真的生效。当改动是可见的（界面、渲染、交互），循环的终点是「在运行中的 App 里看到它」——沙箱档 e2e 或 screenshot——并在回复里写明看到了什么。

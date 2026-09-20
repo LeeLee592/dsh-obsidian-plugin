@@ -1,5 +1,25 @@
 [
   {
+    "version": "0.8.0",
+    "date": "2026-09-19",
+    "zh": {
+      "title": "新增 obsidian_plugin_eval，并写下硬性验收规则",
+      "items": [
+        "新增 obsidian_plugin_eval（高特权、必审）：在运行中的 App 里执行 JavaScript 并返回结果，是实时状态的逃生舱——读 App 真正持有的东西（插件实例、workspace、metadataCache）、驱动一次交互，或不做重新构建就试一个修法。它是唯一的高特权工具，因此需用户审批；返回会把实际执行的代码回显出来作为审计，代码触及窗口焦点时（如 electron.remote.getCurrentWindow().focus()）会明确警告，因为那会抢走用户的焦点。参数为 code（必填）、vault（可选目标库）、timeoutMs（可选，默认 30000）；只读能回答的优先用 obsidian_plugin_inspect（免费、无需审批）。",
+        "验收规则（硬性）：obsidian_plugin_build 通过 ≠ 插件可用，obsidian_plugin_test 的 PASS ≠ UI 已验证。只要改动涉及界面、渲染或交互，就必须真正看到它——沙箱档 obsidian_plugin_e2e，或对着运行中的 App 用 obsidian_plugin_inspect action=screenshot——并在回复里说明看到了什么。这条规则来自真实任务：改动是全新 UI，build + test 全绿，却从未部署，用户什么也没看到。",
+        "离线冒烟的报告现在点名「本次没有覆盖什么」：没有 DOM 宿主时会写明「注册为编辑器扩展的 UI 代码未被检验」，并指向 e2e / screenshot 做真正的验收，避免 PASS 被误读为 UI 已验证。"
+      ]
+    },
+    "en": {
+      "title": "Add obsidian_plugin_eval, and write down the mandatory acceptance rule",
+      "items": [
+        "New obsidian_plugin_eval (high privilege, approval-gated): runs JavaScript inside the running app and returns the result — the live-state escape hatch for reading what the app really holds (plugin instances, workspace, metadataCache), driving an interaction, or trying a fix without rebuilding. It is the only high-privilege tool, so it is approval-gated; the executed code is echoed back in the result as an audit trail, and the result warns when the code touches window focus (e.g. electron.remote.getCurrentWindow().focus()), because that steals the user's focus. Parameters: code (required), vault (optional target vault), timeoutMs (optional, default 30000); prefer obsidian_plugin_inspect (free, no approval) whenever a read-only action answers the question.",
+        "Acceptance rule (mandatory): obsidian_plugin_build passing does not mean the plugin works, and obsidian_plugin_test PASSing does not mean the UI was verified. If a change touches interface, rendering or interaction, it must actually be seen — in the sandboxed e2e tier (obsidian_plugin_e2e), or against the running app (obsidian_plugin_inspect action=screenshot) — and the reply must say what was seen. The rule comes from a real session: a pure UI change passed build + test and was never deployed, so the user saw nothing.",
+        "The offline smoke report now names what it did NOT cover: without a DOM host it says plainly that UI code registered as an editor extension was not exercised, and points at e2e / screenshot for real acceptance, so a PASS cannot be misread as verified UI."
+      ]
+    }
+  },
+  {
     "version": "0.7.1",
     "date": "2026-09-19",
     "zh": {

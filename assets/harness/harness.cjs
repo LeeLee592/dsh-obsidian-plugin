@@ -540,6 +540,11 @@ function environmentGapDetail(error) {
   if (/\b(document|window|navigator|HTMLElement)\b is not defined/.test(message)) {
     return `not checkable offline: no DOM host was available (${message}) — add jsdom to the plugin project to cover this path`;
   }
+  // Browser features a stub process cannot faithfully provide: frame callbacks,
+  // layout observation, and anything that only reports real geometry.
+  if (/requestAnimationFrame|requestIdleCallback|ResizeObserver|IntersectionObserver|getBoundingClientRect|ownerWindow/i.test(message)) {
+    return `not checkable offline: the view plugin needs real rendering (${message})`;
+  }
   return undefined;
 }
 
@@ -580,7 +585,17 @@ function installHostEnvironment(projectDir) {
     // window.activeDocument, which plain jsdom does not provide.
     // Obsidian attaches its own globals to `window`; bundles read them both as
     // `window.moment` and as the bare `moment` global.
-    const hostGlobals = { moment: createMoment(), require: undefined };
+    const hostGlobals = {
+      moment: createMoment(),
+      // Frame callbacks live on the real window; the proxy must keep them
+      // reachable or a view plugin that schedules a frame fails spuriously.
+      requestAnimationFrame: (cb) => dom.window.setTimeout(() => cb(Date.now()), 0),
+      cancelAnimationFrame: (id) => dom.window.clearTimeout(id),
+      setTimeout: dom.window.setTimeout.bind(dom.window),
+      clearTimeout: dom.window.clearTimeout.bind(dom.window),
+      setInterval: dom.window.setInterval.bind(dom.window),
+      clearInterval: dom.window.clearInterval.bind(dom.window),
+    };
     const obsidianWindow = new Proxy(dom.window, {
       get(target, prop) {
         if (prop === "activeDocument") return target.document;
