@@ -12,46 +12,59 @@
 // The first run downloads its own Obsidian into ./.obsidian-cache (tens of MB)
 // and reuses it afterwards. On a slow connection that download can exceed the
 // runner's body timeout and fail with UND_ERR_BODY_TIMEOUT: run it again, the
-// cache is kept. For offline or CI use, pre-seed the cache and set cacheDir
-// (or OBSIDIAN_CACHE) to it.
+// cache is kept, so progress is not lost. For offline or CI use, pre-seed the
+// cache and point cacheDir at it.
+//
+// SHAPE MATTERS. Every Obsidian option belongs to the capability key
+// "wdio:obsidianOptions"; passing vault/plugins as *service* options looks
+// plausible but is ignored, and Obsidian then starts WITHOUT this plugin
+// installed — the specs fail with "executeObsidian is not a function". The
+// service entry itself is just the string "obsidian".
 
-import { browser } from "@wdio/globals";
+import path from "node:path";
 import type { Options } from "@wdio/types";
 
-const PLUGIN_ID = process.env.E2E_PLUGIN_ID ?? "{{PLUGIN_ID}}";
-const E2E_VAULT = "./e2e/vault";   // a copy is made; your notes are never touched
-const PLUGIN_DIR = "./{{PLUGIN_DIR}}";
+const E2E_VAULT = "./e2e/vault"; // a copy is made; your notes are never touched
 
 export const config: Options.Testrunner = {
 	runner: "local",
 	framework: "mocha",
 	specs: ["./e2e/specs/**/*.e2e.ts"],
 	maxInstances: 1,
-	// wdio-obsidian-service downloads Obsidian, installs the plugin from a path
-	// and starts it with a sandboxed config directory.
-	services: [
-		[
-			"obsidian",
-			{
-				// "earliest" resolves to the minAppVersion declared in manifest.json,
-				// which is exactly the promise the manifest makes.
-				appVersion: process.env.E2E_APP_VERSION ?? "earliest",
-				installerVersion: process.env.E2E_INSTALLER_VERSION ?? "earliest",
-				// Test a copy of the vault: the sandbox never writes to your data.
+	services: ["obsidian"],
+	capabilities: [
+		{
+			browserName: "obsidian",
+			// The Obsidian APP version: "latest" tracks what a user most likely
+			// runs, "earliest" resolves to the minAppVersion in manifest.json —
+			// exactly the compatibility claim the manifest makes. A pinned
+			// version string works too.
+			browserVersion: process.env.E2E_APP_VERSION ?? "latest",
+			// Two flags, both learned the hard way:
+			//  · --no-sandbox: Chromium's renderer sandbox cannot start inside
+			//    another sandbox (an agent shell, a CI container); its helper
+			//    processes abort at startup.
+			//  · --headless=new: the test instance must never put a window on
+			//    screen. Without it Obsidian flashes into view during every run,
+			//    which is interference even though it is not the user's app.
+			"goog:chromeOptions": { args: ["--no-sandbox", "--headless=new"] },
+			"wdio:obsidianOptions": {
+				// "latest" | "earliest" | a specific installer version.
+				installerVersion: process.env.E2E_INSTALLER_VERSION ?? "latest",
+				// A COPY of the vault is used, so tests never write to your notes.
 				vault: E2E_VAULT,
 				copy: true,
-				plugins: [PLUGIN_DIR],
+				// Install the plugin under test from the project directory.
+				plugins: ["."],
 			},
-		],
+		},
 	],
-	capabilities: [{ browserName: "obsidian" }],
-	logLevel: "warn",
+	cacheDir: path.resolve(".obsidian-cache"),
+	// Plain spec reporter. The service also ships an "obsidian" reporter that
+	// prints the Obsidian version instead of Chromium's, but it needs the
+	// separate wdio-obsidian-reporter package — installing that package and
+	// switching this value over is all it takes.
 	reporters: ["spec"],
+	logLevel: "warn",
 	mochaOpts: { ui: "bdd", timeout: 60_000 },
-	// Keep this in sync with E2E_PLUGIN_ID above.
-	before: async () => {
-		// Fail fast and loudly if the plugin is not loaded in the sandbox.
-		const loaded = await browser.executeObsidian(({ app }, id) => id in app.plugins.plugins, PLUGIN_ID);
-		if (!loaded) throw new Error(`plugin "${PLUGIN_ID}" did not load in the sandboxed Obsidian`);
-	},
 };

@@ -178,8 +178,8 @@ async function init(fs: Fs, args: E2eArgs, call: FsCall, artifactDir?: string): 
   lines.push(
     "",
     "Why this is the default verification tier: the sandbox is a separate Obsidian",
-    "with its own config directory and a copy of the vault, so nothing switches your",
-    "window or steals focus while it runs.",
+    "with its own config directory, a copy of the vault and a headless window, so",
+    "nothing switches, focuses or even briefly shows your Obsidian while it runs.",
     "",
     "First run downloads its own Obsidian (tens of MB) into ./.obsidian-cache and",
     "reuses it afterwards. On a slow connection that download can exceed the",

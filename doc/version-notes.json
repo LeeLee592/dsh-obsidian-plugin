@@ -1,5 +1,29 @@
 [
   {
+    "version": "0.8.1",
+    "date": "2026-09-22",
+    "zh": {
+      "title": "修复沙箱化 E2E 脚手架：配置形态、依赖清单与「不要弹窗」",
+      "items": [
+        "修复：生成的 wdio 配置把 vault / plugins / 版本号写在 service 选项里，而服务要求它们属于 capability 的 wdio:obsidianOptions——后者会被静默忽略，导致 Obsidian 在不装本插件的情况下启动，测试报 executeObsidian is not a function。",
+        "修复：模板默认使用 wdio-obsidian-reporter，但依赖清单里没有它，运行时报 Couldn't find plugin obsidian reporter；默认改为 spec reporter，并在注释里说明换成 obsidian reporter 需要额外安装哪个包。",
+        "修复：示例 spec 有两处会误判——强制要求插件注册命令（编辑器扩展型插件合法地一个都没有），以及给 expect 传自定义消息（wdio 的 expect 只接受一个参数）。现在断言对任意插件都成立，并新增一条「真的是 Obsidian 而非裸 Chromium」的断言。",
+        "**测试实例不再闪现**：capability 增加 --headless=new。此前每次运行都会把 Obsidian 窗口闪到屏幕上——虽然不是用户的实例，但同样是干扰。",
+        "保留 --no-sandbox 并说明原因：Chromium 的渲染器沙箱无法在另一个沙箱（agent shell、CI 容器）内启动，helper 进程会在启动时 abort。"
+      ]
+    },
+    "en": {
+      "title": "Fix the sandboxed E2E scaffold: option shape, dependency list, and no flashing window",
+      "items": [
+        "Fix: the generated wdio config passed vault / plugins / versions as service options, but the service requires them under the capability key wdio:obsidianOptions. They were silently ignored, so Obsidian started WITHOUT the plugin installed and the specs failed with executeObsidian is not a function.",
+        "Fix: the template defaulted to the wdio-obsidian-reporter, which is not in the dependency list, so the run died with 'Couldn't find plugin obsidian reporter'. The default is now the spec reporter, with a comment naming the package to install for the Obsidian-version reporter.",
+        "Fix: the example spec had two false failures — it demanded at least one registered command (an editor-extension plugin legitimately has none) and passed a custom message to expect (wdio's expect takes exactly one argument). The checks now hold for any plugin, plus one that proves the session really is Obsidian and not bare Chromium.",
+        "**The test instance no longer flashes on screen**: the capability now sets --headless=new. Before this, every run briefly showed an Obsidian window — not the user's, but still interference.",
+        "Kept --no-sandbox with its reason documented: Chromium's renderer sandbox cannot start inside another sandbox (an agent shell, a CI container); its helpers abort at startup."
+      ]
+    }
+  },
+  {
     "version": "0.8.0",
     "date": "2026-09-19",
     "zh": {
