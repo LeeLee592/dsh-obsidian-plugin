@@ -1,5 +1,27 @@
 [
   {
+    "version": "0.8.2",
+    "date": "2026-09-23",
+    "zh": {
+      "title": "E2E 配置漂移检测：已存在的脚手架不再被默认为「可用」",
+      "items": [
+        "症状：真实任务中仍然频繁闪现 Obsidian。根因不是模板——而是**项目里那份旧配置**（在 0.8.1 之前生成，只有 --no-sandbox、没有 --headless=new），工具却因为「文件已存在」而不做任何提醒，一次会话里这样跑了 13 次。",
+        "e2e status 现在校验配置的必需项并报告漂移：capability 形态（wdio:obsidianOptions）、services 写法、--no-sandbox、--headless=new、copy: true、plugins —— 每一项都附带「缺了会怎样」。",
+        "e2e init 在保留旧配置时同样提示漂移，并给出刷新命令（force=true 只覆盖配置文件，不动你的 specs）。",
+        "写入被沙箱拒绝（项目在工作区之外）时，不再抛裸 EPERM，而是给出可执行诊断：目标路径、原因、可选做法，以及配置必需项清单。"
+      ]
+    },
+    "en": {
+      "title": "E2E config drift detection: an existing scaffold is no longer assumed to work",
+      "items": [
+        "Symptom: Obsidian still flashed repeatedly during a real task. The cause was not the template but the project's EXISTING config, generated before 0.8.1 — it had --no-sandbox but not --headless=new — and nothing warned about it because the file was present. One session ran it thirteen times that way.",
+        "e2e status now validates the config's required settings and reports drift: capability shape (wdio:obsidianOptions), the services form, --no-sandbox, --headless=new, copy: true and plugins — each with what breaks without it.",
+        "e2e init warns about drift when it keeps an existing config, and names the refresh command (force=true rewrites only the config files, never your specs).",
+        "A sandbox refusal (project outside the workspace) no longer escapes as a bare EPERM: it reports the target path, the reason, the options, and the list of required settings."
+      ]
+    }
+  },
+  {
     "version": "0.8.1",
     "date": "2026-09-22",
     "zh": {

@@ -66,6 +66,32 @@ export async function e2eAction(fs: Fs, args: E2eArgs, call: FsCall = {}, artifa
   return await init(fs, args, call, artifactDir);
 }
 
+/**
+ * Facts a generated config must carry, each with the failure it prevents.
+ *
+ * Why a drift check exists at all: a scaffold is generated once and then lives in
+ * the project forever, while this template keeps learning. A real session ran the
+ * pre-0.8.1 config thirteen times and every run flashed an Obsidian window on
+ * screen — the file was "there", so nothing suggested it was out of date.
+ */
+const REQUIRED_CONFIG_FACTS: Array<{ test: RegExp; label: string; why: string }> = [
+  {
+    test: /"wdio:obsidianOptions"/,
+    label: 'Obsidian options are a capability key ("wdio:obsidianOptions")',
+    why: "as service options they are ignored and Obsidian starts without the plugin, failing as \"executeObsidian is not a function\"",
+  },
+  { test: /services:\s*\["obsidian"\]/, label: 'services: ["obsidian"]', why: "the service entry takes no options object" },
+  { test: /--no-sandbox/, label: "--no-sandbox on the capability", why: "Chromium's helpers abort at startup inside a nested sandbox" },
+  { test: /--headless=new/, label: "--headless=new on the capability", why: "without it every run flashes an Obsidian window on screen" },
+  { test: /copy:\s*true/, label: "copy: true", why: "the vault must be opened as a copy, never in place" },
+  { test: /plugins:/, label: "plugins: [...]", why: "the sandbox needs to install the plugin under test" },
+];
+
+/** Report which required facts a project's existing config is missing. */
+export function configDrift(configText: string): string[] {
+  return REQUIRED_CONFIG_FACTS.filter((fact) => !fact.test.test(configText)).map((fact) => `${fact.label} — ${fact.why}`);
+}
+
 async function status(fs: Fs, args: E2eArgs, call: FsCall): Promise<string> {
   const projectDir = await fs.resolve(args.projectDir, call.workspaceRoot);
   const dir = join(projectDir, args.dir ?? "e2e");
@@ -85,12 +111,22 @@ async function status(fs: Fs, args: E2eArgs, call: FsCall): Promise<string> {
   const devDeps = { ...(pkg?.devDependencies ?? {}) } as Record<string, string>;
   const missing = E2E_DEV_DEPS.filter((dep) => !(dep in devDeps));
 
+  // A config that exists is not necessarily a config that works.
+  const configPath = join(projectDir, "wdio.conf.mts");
+  const configText = (await fs.readText(configPath).catch(() => undefined)) ?? undefined;
+  const drift = configText === undefined ? [] : configDrift(configText);
+
   return [
     `Sandboxed E2E for ${manifest.id}`,
     `  scaffold: ${files.map(([r]) => r).join(", ")} under ${dir}`,
     ...present.map((line) => `    - ${line}`),
     `  scripts:  e2e ${scripts.e2e ? "present" : "missing"} · e2e:watch ${scripts["e2e:watch"] ? "present" : "missing"}`,
     missing.length ? `  deps:     missing ${missing.join(", ")} — run: pnpm add -D ${missing.join(" ")}` : "  deps:     all present",
+    drift.length
+      ? `  config:   OUT OF DATE — ${drift.length} required setting(s) missing:\n${drift.map((d) => `              · ${d}`).join("\n")}\n            run action=init force=true to refresh wdio.conf.mts (your specs are kept)`
+      : configText === undefined
+        ? "  config:   not scaffolded yet — run action=init"
+        : "  config:   up to date",
     "Note: this tier downloads its own Obsidian into an isolated config directory and works on a copy of the vault, so your own Obsidian is never switched or focused.",
   ].join("\n");
 }
@@ -119,6 +155,8 @@ async function init(fs: Fs, args: E2eArgs, call: FsCall, artifactDir?: string): 
 
   const written: string[] = [];
   const skipped: string[] = [];
+  const denied = (error: unknown) => (error as { code?: string })?.code === "FS_SANDBOX_DENIED" || (error as { code?: string })?.code === "EPERM";
+  try {
   for (const [target, template] of rendered) {
     const label = relative(projectDir, target);
     if ((await fs.exists(target)) && !args.force) {
@@ -128,12 +166,31 @@ async function init(fs: Fs, args: E2eArgs, call: FsCall, artifactDir?: string): 
     await fs.writeText(target, renderTemplate(template, vars), call.policy, call.signal);
     written.push(label);
   }
+  } catch (error) {
+    if (denied(error)) {
+      return [
+        `Error: cannot write the E2E scaffold into "${projectDir}" — it is outside the session workspace`,
+        'and sandbox mode "workspace-write" only allows writes under the workspace or the temp dir.',
+        "Options:",
+        "  1) Apply the change by hand — see the required settings below",
+        "  2) Re-run with a wider sandbox mode and approve the prompt",
+        "Required settings for wdio.conf.mts (a config missing any of these fails or interferes):",
+        ...REQUIRED_CONFIG_FACTS.map((f) => `  · ${f.label} — ${f.why}`),
+      ].join("\n");
+    }
+    throw error;
+  }
 
   // The sandbox downloads Obsidian builds and copies the vault; keep that out of git.
+  let gitignoreNote = ".gitignore already ignores e2e artifacts";
+  let addedScripts: string[] = [];
+  let scripts: Record<string, string> = {};
+  let missingDeps: string[] = [];
+  let pkg: Record<string, unknown> = {};
+  try {
   const gitignorePath = join(projectDir, ".gitignore");
   const existing = (await fs.readText(gitignorePath).catch(() => "")) ?? "";
   const block = readAsset("../assets/e2e/gitignore.e2e").trimStart();
-  let gitignoreNote = ".gitignore already ignores e2e artifacts";
   if (!existing.includes(".e2e-obsidian/")) {
     const separator = existing.endsWith("\n") || existing === "" ? "" : "\n";
     await fs.writeText(gitignorePath, `${existing}${separator}\n${block}`, call.policy, call.signal);
@@ -141,9 +198,8 @@ async function init(fs: Fs, args: E2eArgs, call: FsCall, artifactDir?: string): 
   }
 
   // Wire the scripts, preserving everything already there.
-  const pkg = (await fs.readJson(join(projectDir, "package.json"))) ?? {};
-  const scripts = { ...(pkg.scripts ?? {}) } as Record<string, string>;
-  const addedScripts: string[] = [];
+  pkg = (await fs.readJson(join(projectDir, "package.json"))) ?? {};
+  scripts = { ...(pkg.scripts ?? {}) } as Record<string, string>;
   if (!scripts.e2e) {
     scripts.e2e = "wdio run ./wdio.conf.mts";
     addedScripts.push("e2e");
@@ -156,15 +212,37 @@ async function init(fs: Fs, args: E2eArgs, call: FsCall, artifactDir?: string): 
     pkg.scripts = scripts;
     await fs.writeText(join(projectDir, "package.json"), JSON.stringify(pkg, null, 2) + "\n", call.policy, call.signal);
   }
+  } catch (error) {
+    if (denied(error)) {
+      return [
+        `Error: cannot update "${projectDir}/.gitignore" or package.json — the project is outside the session workspace`,
+        "The E2E files themselves were written; add these yourself:",
+        `  · .gitignore: ${readAsset("../assets/e2e/gitignore.e2e").trim().split("\n").join(" / ")}`,
+        '  · package.json scripts: "e2e": "wdio run ./wdio.conf.mts"',
+      ].join("\n");
+    }
+    throw error;
+  }
 
   const devDeps = { ...(pkg.devDependencies ?? {}) } as Record<string, string>;
-  const missingDeps = E2E_DEV_DEPS.filter((dep) => !(dep in devDeps));
+  missingDeps = E2E_DEV_DEPS.filter((dep) => !(dep in devDeps));
 
   const lines = [
     `Scaffolded sandboxed E2E for ${manifest.id}`,
     `  wrote:    ${written.length ? written.join(", ") : "(nothing new)"}`,
   ];
   if (skipped.length) lines.push(`  kept:     ${skipped.join(", ")} (already present; pass force=true to overwrite)`);
+  if (skipped.includes("wdio.conf.mts")) {
+    const existing = (await fs.readText(join(projectDir, "wdio.conf.mts")).catch(() => undefined)) ?? "";
+    const drift = configDrift(existing);
+    if (drift.length) {
+      lines.push(
+        `  ! the kept wdio.conf.mts is OUT OF DATE — ${drift.length} required setting(s) missing:`,
+        ...drift.map((d) => `      · ${d}`),
+        "    run action=init force=true to refresh it (your specs are not touched)",
+      );
+    }
+  }
   lines.push(
     `  plugin:   the sandbox installs from "${vars.pluginDir}" — build before running`,
     `  scripts:  ${addedScripts.length ? `added ${addedScripts.join(", ")}` : "e2e scripts already present"}`,

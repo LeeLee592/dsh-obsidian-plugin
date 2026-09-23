@@ -132,3 +132,44 @@ test("the generated config documents why the tier exists", async () => {
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("status and init report a config that predates a required setting", async () => {
+  const dir = await project();
+  try {
+    // A config written before --headless=new existed: plausible, present, and it
+    // flashes a window on every run. Nothing else in the tool would notice.
+    await writeFile(
+      join(dir, "wdio.conf.mts"),
+      [
+        'const config = {',
+        '  services: ["obsidian"],',
+        '  capabilities: [{ browserName: "obsidian", "goog:chromeOptions": { args: ["--no-sandbox"] }, "wdio:obsidianOptions": { vault: "./e2e/vault", copy: true, plugins: ["."] } }],',
+        '};',
+        'export { config };',
+      ].join("\n"),
+    );
+
+    const out = await e2eAction(fs, { action: "status", projectDir: dir });
+    assert.match(out, /config:\s+OUT OF DATE/);
+    assert.match(out, /--headless=new/, "the missing setting is named");
+    assert.match(out, /every run flashes an Obsidian window/, "and why it matters");
+    assert.match(out, /action=init force=true/, "with the way to fix it");
+
+    const kept = await e2eAction(fs, { action: "init", projectDir: dir });
+    assert.match(kept, /OUT OF DATE/, "init must warn too, not silently keep a stale config");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a current config reports no drift", async () => {
+  const dir = await project();
+  try {
+    await e2eAction(fs, { action: "init", projectDir: dir });
+    const out = await e2eAction(fs, { action: "status", projectDir: dir });
+    assert.match(out, /config:\s+up to date/);
+    assert.doesNotMatch(out, /OUT OF DATE/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
