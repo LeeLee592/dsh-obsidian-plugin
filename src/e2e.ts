@@ -35,6 +35,8 @@ interface E2eVars {
   pluginName: string;
   /** Directory the built main.js lands in, relative to the project. */
   pluginDir: string;
+  /** Vault the sandbox opens (copied before use), relative to the project. */
+  vaultDir: string;
 }
 
 /** Render the `{{...}}` placeholders used by the shipped templates. */
@@ -42,7 +44,8 @@ export function renderTemplate(template: string, vars: E2eVars): string {
   return template
     .split("{{PLUGIN_ID}}").join(vars.pluginId)
     .split("{{PLUGIN_NAME}}").join(vars.pluginName)
-    .split("{{PLUGIN_DIR}}").join(vars.pluginDir);
+    .split("{{PLUGIN_DIR}}").join(vars.pluginDir)
+    .split("{{VAULT_DIR}}").join(vars.vaultDir);
 }
 
 /**
@@ -58,6 +61,59 @@ export function pluginDirFor(projectDir: string, artifactDir: string): string {
   if (rel === "") return ".";
   if (rel.startsWith("..") || isAbsolute(rel)) return artifactDir;
   return rel.split("\\").join("/");
+}
+
+/** A project-relative path in the "./x/y" form the generated config expects. */
+export function posixRel(from: string, to: string): string {
+  const rel = relative(from, to).split("\\").join("/");
+  if (rel === "" || rel === ".") return ".";
+  return rel.startsWith(".") ? rel : `./${rel}`;
+}
+
+/** Directory names that look like a throwaway test vault rather than real notes. */
+const TEST_VAULT_NAMES = ["test", "testvault", "test-vault", "test vault", "sandbox", "e2e", "dev", "example"];
+
+/** Directories never worth scanning for a vault. */
+const IGNORED_DIRS = new Set(["node_modules", ".git", ".obsidian", ".obsidian-cache", ".e2e-obsidian", "dist", "build", "coverage"]);
+
+/** A vault is any directory holding a `.obsidian` folder. */
+async function isVault(fs: Fs, dir: string, call: FsCall): Promise<boolean> {
+  return await fs.isDirectory(join(dir, ".obsidian"), call.workspaceRoot);
+}
+
+/**
+ * Find a test vault already in the project, or decide to create one.
+ *
+ * Why this exists: the config's vault path used to be a hardcoded `./e2e/vault`
+ * that nothing ever created, so a freshly scaffolded project failed its very
+ * first `pnpm run e2e` in onPrepare with `Vault "…" doesn't exist`. A scaffold
+ * that does not run as generated is a defect, not a setup step.
+ *
+ * A vault that exists is preferred over an invented one because it is what the
+ * developer actually opens the plugin against. Candidates are ranked so that a
+ * directory named like a test vault wins over a folder of real notes, and
+ * `mdCount` is reported so the caller can warn instead of silently copying a
+ * personal vault.
+ */
+export async function findVault(
+  fs: Fs,
+  projectDir: string,
+  scaffoldDir: string,
+  call: FsCall = {},
+): Promise<{ dir: string; existing: boolean; mdCount: number }> {
+  const entries = await fs.listDir(projectDir, call.workspaceRoot);
+  const candidates: Array<{ dir: string; mdCount: number; named: boolean }> = [];
+  for (const name of entries) {
+    if (name.startsWith(".") || IGNORED_DIRS.has(name)) continue;
+    if (join(projectDir, name) === scaffoldDir) continue;
+    const dir = join(projectDir, name);
+    if (!(await isVault(fs, dir, call))) continue;
+    const md = (await fs.listDir(dir, call.workspaceRoot)).filter((f) => f.endsWith(".md")).length;
+    candidates.push({ dir, mdCount: md, named: TEST_VAULT_NAMES.includes(name.toLowerCase()) });
+  }
+  if (candidates.length === 0) return { dir: join(scaffoldDir, "vault"), existing: false, mdCount: 0 };
+  candidates.sort((a, b) => Number(b.named) - Number(a.named) || a.mdCount - b.mdCount);
+  return { dir: candidates[0].dir, existing: true, mdCount: candidates[0].mdCount };
 }
 
 export async function e2eAction(fs: Fs, args: E2eArgs, call: FsCall = {}, artifactDir?: string): Promise<string> {
@@ -123,6 +179,15 @@ async function status(fs: Fs, args: E2eArgs, call: FsCall): Promise<string> {
   const configText = (await fs.readText(configPath).catch(() => undefined)) ?? undefined;
   const drift = configText === undefined ? [] : configDrift(configText);
 
+  // Vault existence is a hard prerequisite: when it is missing the service aborts
+  // in onPrepare, before a single spec runs.
+  const vaultPath = /const E2E_VAULT\s*=\s*"([^"]+)"/.exec(configText ?? "")?.[1];
+  const vaultLine = vaultPath === undefined
+    ? "  vault:    unknown — no E2E_VAULT in wdio.conf.mts"
+    : (await fs.isDirectory(join(projectDir, vaultPath), call.workspaceRoot))
+      ? `  vault:    ${vaultPath} (present; copied per run)`
+      : `  vault:    ${vaultPath} MISSING — every run will fail in onPrepare ("Vault ... doesn't exist"); run action=init`;
+
   return [
     `Sandboxed E2E for ${manifest.id}`,
     `  scaffold: ${files.map(([r]) => r).join(", ")} under ${dir}`,
@@ -134,6 +199,7 @@ async function status(fs: Fs, args: E2eArgs, call: FsCall): Promise<string> {
       : configText === undefined
         ? "  config:   not scaffolded yet — run action=init"
         : "  config:   up to date",
+    vaultLine,
     "Note: this tier downloads its own Obsidian into an isolated config directory and works on a copy of the vault, so your own Obsidian is never switched or focused.",
   ].join("\n");
 }
@@ -144,10 +210,14 @@ async function init(fs: Fs, args: E2eArgs, call: FsCall, artifactDir?: string): 
   if (!manifest?.id) return 'Error: manifest.json not found, invalid JSON, or missing a string "id".';
 
   const specsDir = join(projectDir, args.dir ?? "e2e");
+  // The config's vault must exist before the first run, or the service aborts in
+  // onPrepare. Prefer a vault the project already has; create an empty one if not.
+  const vault = await findVault(fs, projectDir, specsDir, call);
   const vars: E2eVars = {
     pluginId: manifest.id,
     pluginName: manifest.name ?? manifest.id,
     pluginDir: pluginDirFor(projectDir, artifactDir ?? join(projectDir, "main.js")),
+    vaultDir: posixRel(projectDir, vault.dir),
   };
 
   // `wdio run` resolves its config from the project root, so the config lives
@@ -172,6 +242,13 @@ async function init(fs: Fs, args: E2eArgs, call: FsCall, artifactDir?: string): 
     }
     await fs.writeText(target, renderTemplate(template, vars), call.policy, call.signal);
     written.push(label);
+  }
+
+  // A config whose vault path does not exist fails before the first spec, so the
+  // vault is part of the scaffold, not something the developer is left to notice.
+  if (!vault.existing) {
+    await fs.mkdir(join(vault.dir, ".obsidian"), call.policy, call.signal);
+    written.push(`${posixRel(projectDir, vault.dir)}/ (empty test vault)`);
   }
   } catch (error) {
     if (denied(error)) {
@@ -255,6 +332,19 @@ async function init(fs: Fs, args: E2eArgs, call: FsCall, artifactDir?: string): 
     `  scripts:  ${addedScripts.length ? `added ${addedScripts.join(", ")}` : "e2e scripts already present"}`,
     `  ${gitignoreNote}`,
   );
+  lines.push(
+    vault.existing
+      ? `  vault:    ${vars.vaultDir} (a vault already in the project; copied per run, so tests never write to it)`
+      : `  vault:    ${vars.vaultDir} (created empty — no test vault existed in the project)`,
+  );
+  // Copying is safe but not silent: a vault full of notes is the wrong thing to
+  // point tests at, and the developer should decide that, not the scaffold.
+  if (vault.existing && vault.mdCount > 20) {
+    lines.push(
+      `  ! that vault has ${vault.mdCount} notes at its root — if it is your real vault, point E2E_VAULT in`,
+      "    wdio.conf.mts at a purpose-built test vault instead (tests still only ever read a copy)",
+    );
+  }
   if (missingDeps.length) {
     lines.push(`  deps:     install the test runner:\n            pnpm add -D ${missingDeps.join(" ")}`);
   } else {

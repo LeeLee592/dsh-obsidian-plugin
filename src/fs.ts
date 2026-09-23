@@ -115,6 +115,19 @@ export class Fs {
     await writeFile(abs, content, "utf8");
   }
 
+  /**
+   * Create a directory (and parents). Used by scaffolds that must ship a
+   * runnable state — e.g. the E2E vault, without which the first run fails.
+   */
+  async mkdir(path: string, policy?: any, signal?: AbortSignal, workspaceRoot?: string): Promise<void> {
+    if (this.fs) {
+      const { target } = await this.locate(path, workspaceRoot);
+      await this.fs.mkdir(target, { recursive: true }, undefined, signal, policy);
+      return;
+    }
+    await mkdir(await this.resolve(path, workspaceRoot), { recursive: true });
+  }
+
   async listDir(path: string, workspaceRoot?: string): Promise<string[]> {
     if (this.fs) {
       try {

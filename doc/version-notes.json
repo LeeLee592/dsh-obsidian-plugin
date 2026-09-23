@@ -1,5 +1,31 @@
 [
   {
+    "version": "0.8.4",
+    "date": "2026-09-23",
+    "zh": {
+      "title": "E2E 脚手架开箱即跑：库路径不再指向一个不存在的目录",
+      "items": [
+        "修掉一个硬缺陷：生成的 wdio.conf.mts 一直写死 vault=\"./e2e/vault\"，而脚手架从不创建它。全新项目第一次 pnpm run e2e 会在 onPrepare 直接失败（Vault \"...\" doesn't exist），一个 spec 都跑不到。此前没暴露，只是因为某个项目里恰好手工建过这个目录。",
+        "init 现在先找项目里已有的库（含 .obsidian 的目录，跳过 node_modules/.git/scaffold 等）并复用它——复用它才贴近开发者真实的插件使用环境；测试名（Test/TestVault/sandbox/e2e…）优先于普通笔记目录，笔记多的候选会被排序靠后。找不到才创建一个空的 e2e/vault（含 .obsidian）。",
+        "status 与 init 都会报告最终用的库；若复用的库根部笔记数 > 20，会提示改用专门的测试库。status 另外会指出「配置指向但不存在的库」，因为那是每次运行都必然失败的前置条件。",
+        "新增 Fs.mkdir（含 recursive），让脚手架能交付「可运行态」而不只是「文件已写」。",
+        "安全边界不变：vault 仍以 copy: true 打开（服务端默认即 true），测试永远只读一份副本，绝不改动被指向的库；新增测试钉住这一点。",
+        "验证：68 项测试通过；用真实项目复算，库解析为 ./Test（项目里已有的测试库）而非那个空目录。L4 实跑本次因本机到 github.com/obsidianmd/obsidian-releases 的连接超时而未能完成（下载端点不可达，属环境问题）。"
+      ]
+    },
+    "en": {
+      "title": "The E2E scaffold runs as generated: the vault path no longer points at a directory nobody created",
+      "items": [
+        "Fixes a hard defect: the generated wdio.conf.mts hardcoded vault=\"./e2e/vault\" and nothing ever created it. A freshly scaffolded project failed its very first `pnpm run e2e` in onPrepare (`Vault \"…\" doesn't exist`) without running a single spec. It went unnoticed only because one project happened to have that directory created by hand.",
+        "init now looks for a vault already in the project (a directory holding .obsidian, skipping node_modules/.git/the scaffold, and so on) and reuses it — reusing it is what keeps the sandbox close to how the developer actually uses the plugin. Test-named directories (Test/TestVault/sandbox/e2e…) rank above folders of notes, and note-heavy candidates sort last. Only when there is none does it create an empty e2e/vault (with .obsidian).",
+        "Both status and init report the vault that will be used, and a reused vault with more than 20 notes at its root is flagged so the developer can point at a purpose-built test vault instead. status additionally names a vault the config points at but that does not exist, since that fails every run.",
+        "Adds Fs.mkdir (recursive) so a scaffold can deliver a runnable state, not merely written files.",
+        "The safety boundary is unchanged: the vault is still opened with copy: true (the service defaults to true), so tests only ever read a copy and never modify the vault they point at; a new test pins that.",
+        "Verified: 68 tests pass, and re-resolving against a real project yields ./Test (the test vault already in it) instead of the empty directory. The L4 run was not completed this time because this machine could not reach github.com/obsidianmd/obsidian-releases (the download endpoint timed out — an environment problem)."
+      ]
+    }
+  },
+  {
     "version": "0.8.3",
     "date": "2026-09-23",
     "zh": {

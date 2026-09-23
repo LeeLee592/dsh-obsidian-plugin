@@ -10,7 +10,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Fs } from "../lib/fs.js";
-import { e2eAction, pluginDirFor, renderTemplate } from "../lib/e2e.js";
+import { e2eAction, findVault, pluginDirFor, posixRel, renderTemplate } from "../lib/e2e.js";
 
 const fs = new Fs();
 
@@ -25,13 +25,122 @@ async function project(extra: Record<string, unknown> = {}): Promise<string> {
   return dir;
 }
 
-test("renderTemplate substitutes the plugin identity", () => {
-  const out = renderTemplate("id={{PLUGIN_ID}} name={{PLUGIN_NAME}} dir={{PLUGIN_DIR}}", {
+test("renderTemplate substitutes the plugin identity and the vault", () => {
+  const out = renderTemplate("id={{PLUGIN_ID}} name={{PLUGIN_NAME}} dir={{PLUGIN_DIR}} vault={{VAULT_DIR}}", {
     pluginId: "demo-notes",
     pluginName: "Demo Notes",
     pluginDir: ".",
+    vaultDir: "./Test",
   });
-  assert.equal(out, "id=demo-notes name=Demo Notes dir=.");
+  assert.equal(out, "id=demo-notes name=Demo Notes dir=. vault=./Test");
+});
+
+test("posixRel produces the project-relative form the config expects", () => {
+  assert.equal(posixRel("/p", "/p/Test"), "./Test");
+  assert.equal(posixRel("/p", "/p/e2e/vault"), "./e2e/vault");
+  assert.equal(posixRel("/p", "/p"), ".");
+});
+
+test("findVault reuses a test vault the project already has", async () => {
+  const dir = await project();
+  try {
+    await mkdir(join(dir, "TestVault", ".obsidian"), { recursive: true });
+    const found = await findVault(fs, dir, join(dir, "e2e"));
+    assert.equal(found.existing, true);
+    assert.equal(found.dir, join(dir, "TestVault"));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("findVault prefers a test-named vault over a folder of notes", async () => {
+  const dir = await project();
+  try {
+    // Both are vaults; copying the wrong one silently changes what is tested.
+    await mkdir(join(dir, "Notes", ".obsidian"), { recursive: true });
+    await mkdir(join(dir, "Test", ".obsidian"), { recursive: true });
+    for (let i = 0; i < 30; i++) await writeFile(join(dir, "Notes", `n${i}.md`), "# n\n");
+    const found = await findVault(fs, dir, join(dir, "e2e"));
+    assert.equal(found.dir, join(dir, "Test"), "the test-named vault wins even when smaller");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("findVault ignores hidden, dependency and scaffold directories", async () => {
+  const dir = await project();
+  try {
+    for (const name of ["node_modules", ".obsidian-cache", "e2e"]) {
+      await mkdir(join(dir, name, "Inner", ".obsidian"), { recursive: true });
+    }
+    const found = await findVault(fs, dir, join(dir, "e2e"));
+    assert.equal(found.existing, false, "a vault inside node_modules/the scaffold is not a candidate");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("init creates a vault when the project has none, so the first run works", async () => {
+  const dir = await project();
+  try {
+    const out = await e2eAction(fs, { action: "init", projectDir: dir });
+    // Without this the service aborts in onPrepare before any spec runs:
+    // `Vault "…/e2e/vault" doesn't exist`.
+    assert.match(out, /created empty/);
+    assert.equal(await fs.isDirectory(join(dir, "e2e", "vault", ".obsidian")), true, "the vault must exist after init");
+    const conf = await readFile(join(dir, "wdio.conf.mts"), "utf8");
+    assert.match(conf, /const E2E_VAULT = "\.\/e2e\/vault"/, "the config must point at the vault that now exists");
+    assert.doesNotMatch(conf, /\{\{/, "no placeholder may survive");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("the reused vault is opened as a copy, so tests never write to it", async () => {
+  const dir = await project();
+  try {
+    await mkdir(join(dir, "Test", ".obsidian"), { recursive: true });
+    await writeFile(join(dir, "Test", "note.md"), "# real note\n");
+    await e2eAction(fs, { action: "init", projectDir: dir });
+    const conf = await readFile(join(dir, "wdio.conf.mts"), "utf8");
+    // The service copies unless told otherwise (`copy: obsidianOptions.copy ?? true`),
+    // so this is the guarantee that pointing E2E_VAULT at a real test vault cannot
+    // modify it — the strongest form of "never touch the user's data" available here.
+    assert.match(conf, /vault: E2E_VAULT,\s*\n\s*copy: true/, "the vault must be copied, never opened in place");
+    assert.equal(await readFile(join(dir, "Test", "note.md"), "utf8"), "# real note\n", "scaffolding must not touch vault contents");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("init reuses an existing vault instead of inventing one", async () => {
+  const dir = await project();
+  try {
+    await mkdir(join(dir, "Test", ".obsidian"), { recursive: true });
+    const out = await e2eAction(fs, { action: "init", projectDir: dir });
+    assert.match(out, /already in the project/);
+    assert.equal(await fs.exists(join(dir, "e2e", "vault")), false, "no second vault is created");
+    const conf = await readFile(join(dir, "wdio.conf.mts"), "utf8");
+    assert.match(conf, /const E2E_VAULT = "\.\/Test"/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("status names a vault the config points at but that does not exist", async () => {
+  const dir = await project();
+  try {
+    await writeFile(
+      join(dir, "wdio.conf.mts"),
+      'const E2E_VAULT = "./e2e/vault";\n' +
+        'const config = { services: ["obsidian"], capabilities: [{ browserName: "obsidian", "goog:chromeOptions": { args: ["--no-sandbox"] }, "wdio:obsidianOptions": { vault: E2E_VAULT, copy: true, plugins: ["."] } }], before: async function () { for (const w of []) w.hide(); } };\nexport { config };\n',
+    );
+    const out = await e2eAction(fs, { action: "status", projectDir: dir });
+    assert.match(out, /vault: {4}\.\/e2e\/vault MISSING/);
+    assert.match(out, /fail in onPrepare/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("pluginDirFor turns the artifact directory into a project-relative path", () => {

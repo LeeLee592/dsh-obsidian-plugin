@@ -37,6 +37,22 @@ downloaded builds out of git.
 | Parallel runs | no | yes |
 | Placement | none | none |
 
+## The vault must exist before the first run
+
+`wdio-obsidian-service` validates the vault path in `onPrepare` and aborts with
+`Vault "…" doesn't exist` before running a single spec, so "the file is there but
+the vault is not" is a silent-in-design failure. `obsidian_plugin_e2e action=init`
+therefore resolves the vault itself: it reuses a vault already in the project
+(any directory holding `.obsidian`, skipping `node_modules`, `.git` and the
+scaffold itself), preferring test-named ones, and creates an empty `e2e/vault`
+only when there is none. `action=status` reports which vault the config points
+at and whether it exists.
+
+The vault is always opened with `copy: true`, so tests read a per-run copy and
+never modify the vault that is pointed at. That is what makes reusing a real
+project vault safe — but a folder of personal notes is still the wrong target;
+use a purpose-built test vault.
+
 ## The sandbox instance never shows a window
 
 The generated `wdio.conf.mts` hides it in a `before` hook, before any spec runs.

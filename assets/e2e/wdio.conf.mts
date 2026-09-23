@@ -25,7 +25,12 @@ import path from "node:path";
 import { browser } from "@wdio/globals";
 import type { Options } from "@wdio/types";
 
-const E2E_VAULT = "./e2e/vault"; // a copy is made; your notes are never touched
+// The vault the sandbox opens. It is COPIED before use, so tests never touch the
+// original — but it must exist: wdio-obsidian-service fails in onPrepare with
+// `Vault "…" doesn't exist` before any spec runs. obsidian_plugin_e2e picked this
+// path by looking for a real test vault in your project, and created an empty one
+// when there was none. Point it at whichever vault you want tested.
+const E2E_VAULT = "{{VAULT_DIR}}";
 
 export const config: Options.Testrunner = {
 	runner: "local",
