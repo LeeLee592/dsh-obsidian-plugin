@@ -27,7 +27,7 @@
 - **验收规则（硬性）**：`obsidian_plugin_build` 通过 ≠ 插件可用，`obsidian_plugin_test` 的 PASS ≠ UI 已验证（桩环境没有编辑器）。只要本次改动涉及界面、渲染或交互，就必须真正看到它——沙箱档 `obsidian_plugin_e2e`，或对着运行中的 App 用 `obsidian_plugin_inspect action=screenshot`——并在回复里说明看到了什么；不得以「build + test 全绿」宣布完成（真实任务里出现过：改动是全新 UI，两者全绿，却从未部署，用户什么也没看到）。
 - 部署只表示文件已写入、已启用，**不等于插件已加载**：要确认运行中的 Obsidian 真的加载了它，用 `obsidian_plugin_reload` 重载并校验，不得把「文件已写入」当作「已生效」。
 - 只有确实需要验证**用户的真实环境**（用户自己的库、配置、其它插件共存）时才走 L3：先 `obsidian_plugin_vault action=ensure` 把测试库带到前台（带 confirm=true 才会真正登记/打开），再 `obsidian_plugin_reload` 重载并确认插件已加载，最后用 `obsidian_plugin_inspect` 只读观测（status / errors / console / dom / css / screenshot）；只读回答不了的，才升级到 `obsidian_plugin_eval`（唯一的高特权工具，需用户审批）去读实时状态或驱动一次交互。
-- 写入范围是硬门禁：只允许修改**会话工作区内创建的测试库**；用户自己的库只读——包括 CLI 侧的间接写入（`plugin:enable` / `unrestrict` 改写的是当前活动窗口那个库，沙箱拦不到，因此工具会拒绝对非测试库执行）。部署只装进工作区测试库；越界时必须说明目标路径、拒绝原因与可选的下一步。
+- 写入范围是硬门禁：只允许修改**会话工作区内创建的测试库**。文件写入由沙箱拒绝；沙箱看不见的 App 侧写入（`plugin:enable` / `plugin:disable` / `unrestrict`，改写的是当前活动窗口那个库）在目标路径位于工作区外时由 `obsidian_plugin_reload` 拒绝——所以需要这道检查时必须**显式给出库路径**，仅说「当前前台那个库」无法在这里定位。部署只装进工作区测试库；越界时必须说明目标路径、拒绝原因与可选的下一步。
 - 默认路径绝不切换用户的窗口、绝不抢焦点；任何会切换窗口的动作（只有 `obsidian_plugin_vault action=ensure confirm=true`）必须在返回值里显式声明「本次操作把 Obsidian 切到了前台」。
 - L3 真机验证中，窗口级命令按当前活动窗口解析：读数或报错像是来自别的库时，先 `obsidian_plugin_vault action=ensure`，并以 `obsidian_plugin_inspect action=status` 报告的「实际应答库」为准；`vault=` 参数并不可靠。
 - 部署后插件在插件命令里找不到时，先用 `obsidian_plugin_reload action=rescan`（Obsidian 只在库加载时扫描一次插件目录）；插件完全不加载时多半是该库处于受限模式，只能用显式的 `obsidian_plugin_reload action=unrestrict` 关闭——受限模式是逐库的安全设置，只影响该库，绝不作为副作用代为关闭。
