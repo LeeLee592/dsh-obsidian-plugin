@@ -1,5 +1,27 @@
 [
   {
+    "version": "0.8.5",
+    "date": "2026-09-23",
+    "zh": {
+      "title": "新建的空库要能活过克隆",
+      "items": [
+        "配套 0.8.4 的收尾：生成的 .gitignore 原本整目录忽略 e2e/vault/，于是新建的空库不会被提交——队友克隆之后库又不存在，第一次运行照样在 onPrepare 失败，也就是 0.8.4 修掉的那个症状。",
+        "改为只忽略库的内容（e2e/vault/*）并用 !e2e/vault/.gitkeep 保留下目录本身，init 同时写入这个 .gitkeep 标记；新增测试钉住这三行，并明确禁止出现裸的 e2e/vault/ 规则。",
+        "注意（已写进模板注释）：.gitignore 只会被追加一次，如果之后把库换到别的路径，需要手工为那个路径加同样的规则。",
+        "验证：68 项测试通过。"
+      ]
+    },
+    "en": {
+      "title": "A created vault has to survive a clone",
+      "items": [
+        "Follow-up to 0.8.4: the generated .gitignore ignored `e2e/vault/` wholesale, so a newly created vault was never committed — after a teammate cloned the repository the vault was gone again and the first run failed in onPrepare, exactly the symptom 0.8.4 fixed.",
+        "It now ignores only the vault's contents (`e2e/vault/*`) and un-ignores `!e2e/vault/.gitkeep`, and init writes that marker. New tests pin all three lines and explicitly forbid a bare `e2e/vault/` rule.",
+        "Worth knowing, and noted in the template: .gitignore is appended only once, so moving the vault to another path later means adding the same rules for that path by hand.",
+        "Verified: 68 tests pass."
+      ]
+    }
+  },
+  {
     "version": "0.8.4",
     "date": "2026-09-23",
     "zh": {

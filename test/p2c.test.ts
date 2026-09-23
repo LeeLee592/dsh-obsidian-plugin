@@ -88,6 +88,7 @@ test("init creates a vault when the project has none, so the first run works", a
     // `Vault "…/e2e/vault" doesn't exist`.
     assert.match(out, /created empty/);
     assert.equal(await fs.isDirectory(join(dir, "e2e", "vault", ".obsidian")), true, "the vault must exist after init");
+    assert.equal(await fs.exists(join(dir, "e2e", "vault", ".gitkeep")), true, "a marker must survive a clone");
     const conf = await readFile(join(dir, "wdio.conf.mts"), "utf8");
     assert.match(conf, /const E2E_VAULT = "\.\/e2e\/vault"/, "the config must point at the vault that now exists");
     assert.doesNotMatch(conf, /\{\{/, "no placeholder may survive");
@@ -207,6 +208,11 @@ test("init writes the scaffold, wires scripts and keeps the project's own entrie
 
     const gitignore = await readFile(join(dir, ".gitignore"), "utf8");
     assert.match(gitignore, /\.e2e-obsidian\//, "downloaded builds stay out of git");
+    // The vault directory itself must stay tracked: ignoring it wholesale makes a
+    // fresh clone fail the first run in onPrepare, the same way the original bug did.
+    assert.doesNotMatch(gitignore, /^e2e\/vault\/$/m, "a bare `e2e/vault/` would ignore the directory itself");
+    assert.match(gitignore, /^e2e\/vault\/\*$/m, "ignore the vault's contents");
+    assert.match(gitignore, /^!e2e\/vault\/\.gitkeep$/m, "but keep the marker that preserves the directory");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

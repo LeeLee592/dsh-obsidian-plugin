@@ -248,6 +248,10 @@ async function init(fs: Fs, args: E2eArgs, call: FsCall, artifactDir?: string): 
   // vault is part of the scaffold, not something the developer is left to notice.
   if (!vault.existing) {
     await fs.mkdir(join(vault.dir, ".obsidian"), call.policy, call.signal);
+    // A marker the generated .gitignore un-ignores, so the vault directory
+    // itself survives a clone. Without it the first run on a fresh checkout
+    // fails in onPrepare exactly like the original defect.
+    await fs.writeText(join(vault.dir, ".gitkeep"), "", call.policy, call.signal);
     written.push(`${posixRel(projectDir, vault.dir)}/ (empty test vault)`);
   }
   } catch (error) {
