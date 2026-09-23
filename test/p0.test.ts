@@ -245,7 +245,12 @@ test("deploy never claims the plugin is active", async () => {
     assert.match(out, /written/, "the written state is reported");
     assert.match(out, /enabled: yes/, "the enabled state is reported");
     assert.match(out, /active:  unknown/, "loading is NOT claimed");
-    assert.match(out, /has no live-app integration/, "the limitation is stated explicitly");
+    // The limitation must stay explicit: this step writes files, and "active" is
+    // not knowable from it. Pointing at the tools that CAN answer it is not the
+    // same as claiming they already ran.
+    assert.match(out, /this step only writes files/, "the limitation is stated explicitly");
+    assert.match(out, /obsidian_plugin_reload/, "and the tools that answer it are named");
+    assert.doesNotMatch(out, /active:\s+yes/, "installing files must never read as activation");
   } finally {
     await rm(dir, { recursive: true, force: true });
     await rm(vault, { recursive: true, force: true });

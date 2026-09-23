@@ -8,7 +8,7 @@ import { test } from "node:test";
 import { classify, explainCliFailure } from "../lib/cli.js";
 import { cliArgs, parseEvalJson, truncate } from "../lib/inspect.js";
 import { registryPath } from "../lib/vault.js";
-import { reloadPlugin } from "../lib/reload.js";
+import { reloadPlugin, writeScopeRefusal } from "../lib/reload.js";
 
 const ok = (output: string) => ({ ok: true, reason: undefined, output, errorMessage: undefined });
 
@@ -116,4 +116,22 @@ test("reload resolves the id from the project manifest", async () => {
   );
   assert.equal(asked, "/tmp/whatever");
   assert.ok(out.length > 0);
+});
+
+test("an app-side write outside the workspace is refused before any command runs", async () => {
+  const root = "/ws/session";
+  // These go through the OBSIDIAN app, so the file sandbox cannot see them: a
+  // doc-level promise that they are gated is only true if this check exists.
+  assert.match(writeScopeRefusal("/Users/leelee/Documents/MyVault", root) ?? "", /refusing to run an app-side write/);
+  // A sibling directory sharing the workspace prefix is not inside it.
+  assert.match(writeScopeRefusal("/ws/session-evil/vault", root) ?? "", /refusing/);
+  assert.equal(writeScopeRefusal("/ws/session/TestVault", root), undefined, "the test vault is allowed");
+  assert.equal(writeScopeRefusal("/ws/session", root), undefined, "the workspace root itself is allowed");
+  assert.equal(writeScopeRefusal(undefined, root), undefined, "no path given: the active window is the target, not locatable here");
+
+  // The refusal must happen before the CLI is consulted at all.
+  const target = "/Users/leelee/Documents/MyVault";
+  const out = await reloadPlugin({ vault: target, action: "enable", pluginId: "x" }, { workspaceRoot: root });
+  assert.match(out, /refusing to run an app-side write/);
+  assert.doesNotMatch(out, /Enabled x/, "no command may have run");
 });

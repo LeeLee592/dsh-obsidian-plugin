@@ -9,6 +9,7 @@
 //     confirm the plugin is actually registered in the app afterwards, which is
 //     the difference between "the command was accepted" and "the plugin loaded".
 
+import { join, resolve, sep } from "node:path";
 import { runCli, explainCliFailure, type CliOptions } from "./cli.js";
 import { parseEvalJson } from "./inspect.js";
 
@@ -31,6 +32,42 @@ export interface ReloadDeps {
   cli?: CliOptions;
   /** Read the plugin id from the project's manifest.json. */
   readManifestId?: (projectDir: string) => Promise<string | undefined>;
+  /** Session workspace root; targets outside it are refused (see writeScopeRefusal). */
+  workspaceRoot?: string;
+}
+
+/**
+ * Refuse an app-side write aimed at a vault outside the session workspace.
+ *
+ * Why this is not the file sandbox: `plugin:enable`, `plugin:disable` and
+ * `unrestrict` are executed BY the Obsidian app, which rewrites whichever vault
+ * its window currently shows. Those writes never pass through `ctx.fs`, so no
+ * file-level policy can see them — the sandbox would deny nothing while the
+ * user's enable list or restricted-mode setting changed silently. The only
+ * available fence is our own, checked before the command runs.
+ *
+ * A vault identified only as "whatever the active window shows" cannot be
+ * located from here, so that case is not refused; naming a path outside the
+ * workspace is.
+ */
+export function writeScopeRefusal(
+  vault: string | undefined,
+  workspaceRoot: string | undefined,
+): string | undefined {
+  if (!vault || !workspaceRoot) return undefined;
+  const root = resolve(workspaceRoot);
+  const target = resolve(vault);
+  if (target === root || target.startsWith(root + sep)) return undefined;
+  return [
+    `Error: refusing to run an app-side write against "${vault}" — it is outside the session workspace.`,
+    "Obsidian performs plugin:enable / plugin:disable / unrestrict itself, so these rewrite whichever",
+    "vault its window has in front and the file sandbox cannot intercept them. This tool therefore",
+    "refuses any target it can prove is outside the workspace.",
+    "Options:",
+    `  1) Use a test vault inside the workspace: ${join(workspaceRoot, "TestVault")}   ← recommended`,
+    "  2) Verify the change in the sandboxed tier instead: obsidian_plugin_e2e (no app-side writes)",
+    "  3) If you really mean your own vault, run that command yourself — this tool will not.",
+  ].join("\n");
 }
 
 function withVault(vault: string | undefined, argv: string[]): string[] {
@@ -40,6 +77,11 @@ function withVault(vault: string | undefined, argv: string[]): string[] {
 export async function reloadPlugin(args: ReloadArgs, deps: ReloadDeps = {}): Promise<string> {
   const cli = deps.cli ?? {};
   const action: ReloadAction = args.action ?? "reload";
+
+  // Every action here writes through the app, so the scope check comes first —
+  // before any command runs, including rescan/unrestrict which have no plugin id.
+  const refusal = writeScopeRefusal(args.vault, deps.workspaceRoot);
+  if (refusal) return refusal;
 
   let pluginId = args.pluginId;
   if (!pluginId && args.projectDir && deps.readManifestId) {

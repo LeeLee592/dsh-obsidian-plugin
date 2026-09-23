@@ -93,7 +93,7 @@ export interface InspectReport {
  * Evaluated in the app so the answer cannot be confused with the CLI's own
  * notion of the active vault.
  */
-export function identityProbe(code = "({vault:app.vault.getName(),appId:app.appId,restricted:!app.plugins.isEnabled()})"): string[] {
+function identityProbe(code = "({vault:app.vault.getName(),appId:app.appId,restricted:!app.plugins.isEnabled()})"): string[] {
   return ["eval", `code=${code}`];
 }
 
@@ -149,7 +149,7 @@ interface VaultRef {
  * path is reduced to its basename (which is what Obsidian registers as the
  * vault name for a conventionally opened folder).
  */
-export async function resolveVaultRef(fs: Fs, args: InspectArgs, call: FsCall = {}): Promise<VaultRef> {
+async function resolveVaultRef(fs: Fs, args: InspectArgs, call: FsCall = {}): Promise<VaultRef> {
   const source = args.vault;
   if (!source) return {};
   if (source.includes("/") || source.includes("\\") || source.startsWith("~")) {

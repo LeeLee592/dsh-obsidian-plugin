@@ -764,7 +764,7 @@ assets/
 └── skills/obsidian-plugin/   # SKILL.md + reference/{obsidian-cli,debugging-playbook,e2e-sandboxed}.md
 ```
 
-P2/P3 预留（尚未创建）：`harness.ts`（`obsidian_plugin_test` 编排）、`e2e.ts`（`obsidian_plugin_e2e` 脚手架）、`preflight.ts`（把现有探测收敛到一处）、`test/p2.test.ts`。
+P2/P3 落地情况：`harness.ts`（`obsidian_plugin_test` 编排）、`e2e.ts`（`obsidian_plugin_e2e` 脚手架）、`test/p2a|p2b|p2c|p3.test.ts` 均已创建；`preflight.ts` 未单独抽出——探测逻辑留在各工具模块内（`cli.ts` 负责分类、`vault.ts` 负责窗口/库探测），继续抽出的收益不足。
 
 **分层原则**：`index.ts` 只做「组合 + 工具声明」，任何可被测试直接调用的逻辑都放在可独立导入的模块里（`test/` 直接从 `lib/` 导入，不经过 Cordis）。
 
@@ -774,10 +774,10 @@ P2/P3 预留（尚未创建）：`harness.ts`（`obsidian_plugin_test` 编排）
 |---|---|---|---|---|
 | **P0** | `build` + `deploy`（离线路径）+ `dsh.obsidian.json` 绑定 | 「装得进去」，无 CLI 也能用 | 无 | ✅ **已实现**（14 项测试 + 真实第三方插件 float-mark 端到端验证） |
 | **P1** | `vault` + `reload` + `inspect`（含受限模式/信任处置） | 「跑得起来、看得见」 | Obsidian + CLI | ✅ **已实现**（29 项测试 + float-mark 真机全链路验收） |
-| **P2a（前置）** | `build` 硬化：入口点解析链 + 产物发现链 | 真实插件（rollup/自定义入口/产物落测试库）能被构建与定位 | 无 | 待做 |
-| **P2b** | `test` + `assets/harness`（L2 离线冒烟） | 无 App 环境下的最低保障：挡住「加载即崩」 | Node | 待做 |
-| **P2c** | `e2e`（L4 沙箱实例脚手架）+ `reference/e2e-sandboxed.md` | **消除抢焦点**：默认验证档不再打扰用户 | 能下载 Electron/Obsidian | 待做 |
-| **P3** | `eval` + 审批策略 + `preflight` 收敛 + 文档收尾 | 完整闭环与可维护性 | P0–P2 | 部分完成（`src/` 已分层；skill/文档随 P0/P1 同步） |
+| **P2a（前置）** | `build` 硬化：入口点解析链 + 产物发现链 | 真实插件（rollup/自定义入口/产物落测试库）能被构建与定位 | 无 | ✅ **已实现**（editing-toolbar / obsidian-tasks 实测：`src/plugin/main.ts`、根 `main.ts`、产物落测试库均能解析） |
+| **P2b** | `test` + `assets/harness`（L2 离线冒烟） | 无 App 环境下的最低保障：挡住「加载即崩」 | Node | ✅ **已实现**（含视图插件实例化与「环境缺口 vs 插件缺陷」区分；PASS 明确标注为桩环境、不代表 UI 已验证） |
+| **P2c** | `e2e`（L4 沙箱实例脚手架）+ `reference/e2e-sandboxed.md` | **消除抢焦点**：默认验证档不再打扰用户 | 能下载 Electron/Obsidian | ✅ **已实现**（真机实测 5 项断言通过、实例窗口 `isVisible()===false`；配置漂移检测随模板演进；库路径解析与 `.gitignore` 见 v0.8.4/0.8.5） |
+| **P3** | `eval` + 审批策略 + `preflight` 收敛 + 文档收尾 | 完整闭环与可维护性 | P0–P2 | ✅ **已实现**（`eval` 经审批门禁并在真机验证；`src/` 已分层；六份文档 + skill 随各阶段同步。`preflight.ts` 未抽出，理由见上） |
 
 **阶段边界的理由**：P2a 必须先于 P2b/P2c——入口与产物解析不对，后面两档连「验证对象」都找不到（editing-toolbar 已实测证明）。P2c 优先级高于 P3，因为它解决的是**用户的真实痛点（抢焦点）**，而不是能力补全。
 
@@ -793,13 +793,13 @@ P2/P3 预留（尚未创建）：`harness.ts`（`obsidian_plugin_test` 编排）
 | A6 | 调试器已附加时调用 reload | 拒绝执行并提示先 detach，不挂死 | ✅ 冲突已复现 |
 | A7 | CLI 静默超时 | 重试后成功；连续失败报「App 无响应」+ 恢复指引 | ✅ 现象已复现 |
 | A8 | 非模板工程（无 esbuild.config.mjs） | 走 L2 构建脚本或给出明确指引 | 待验 |
-| A9 | 文档一致性 | README/DEVELOP/harness/manual/version-notes/SKILL 全部同步 | 待做 |
-| **A10** | **obsidian-tasks**（根 `main.ts` + `dir: '.'` 产物 + Svelte 构建链 + 177 个既有测试） | `build` 能解析入口与产物；L2 冒烟给出结论；L4 沙箱内加载成功 | 待做（P2 主验收样本） |
-| **A11** | **零干扰验收**：全程只用 L4/L2/L1 完成一次改动→验证 | **用户的 Obsidian 窗口全程不被切换、焦点不被抢**（用切换次数=0 衡量） | 待做（P2c 核心验收） |
-| **A12** | 多版本兼容（L4 独有） | 在 `minAppVersion` 与最新版两个 Obsidian 版本上跑同一套断言 | 待做 |
-| **A13** | **写入门禁**：`deploy` 指向用户库 | **拒绝写入**，给出「用工作区测试库 / 走 L4 / 一次性显式授权」三条选项；不产生任何用户库写入 | 待做 |
-| **A14** | **间接写入门禁**：活动库是用户库时执行 `reload action=enable` | **拒绝执行**并说明「活动窗口是用户库」；用户库的启用列表与受限模式**保持不变** | 待做 |
-| **A15** | 全程零切窗 | 一次「改动 → 验证」的完整循环里，用户 Obsidian 的**活动窗口不发生任何变化**（含不得为让命令成功而 `vault-open`） | 待做 |
+| A9 | 文档一致性 | README/DEVELOP/harness/manual/version-notes/SKILL 全部同步 | ✅ 六份文档 + skill 均随各阶段同步；`README.i18n.yaml` 记录英中一致性 blob 戳 |
+| **A10** | **obsidian-tasks**（根 `main.ts` + `dir: '.'` 产物 + Svelte 构建链 + 177 个既有测试） | `build` 能解析入口与产物；L2 冒烟给出结论；L4 沙箱内加载成功 | ⚠️ **降级为合成验证**：上述三种布局（根 `main.ts`、`outdir: '.'`、rollup `output.dir` 落项目库）已在 `test/p2a.test.ts` 用合成工程逐条覆盖；但本地那份 obsidian-tasks 检出**只有源码树**（无 `manifest.json`/`package.json`/入口），故无法作为真机样本复现。「项目自带构建脚本优先（esbuild-svelte）」与 L4 沙箱内加载则已在真实项目上实测 |
+| **A11** | **零干扰验收**：全程只用 L4/L2/L1 完成一次改动→验证 | **用户的 Obsidian 窗口全程不被切换、焦点不被抢**（用切换次数=0 衡量） | ✅ 工具路径已保证：默认循环不含 `vault-open`（唯一会切窗的命令），L4 实例窗口在 spec 运行前 `isVisible()===false`。**注**：L4 实例自身窗口在启动瞬间仍会出现约 1 秒（无任何开关可抑制，见 §8 说明） |
+| **A12** | 多版本兼容（L4 独有） | 在 `minAppVersion` 与最新版两个 Obsidian 版本上跑同一套断言 | ⏳ 机制就绪（`E2E_APP_VERSION` / `E2E_INSTALLER_VERSION`，`browserVersion` 默认 `latest`、可用 `earliest` 取 `minAppVersion`），但尚未在同一套件里对两个版本各跑一遍 |
+| **A13** | **写入门禁**：`deploy` 指向用户库 | **拒绝写入**，给出「用工作区测试库 / 走 L4 / 一次性显式授权」三条选项；不产生任何用户库写入 | ✅ 沙箱层强制：工作区外的写入被拒（`EPERM`/`FS_SANDBOX_DENIED`），拒绝路径给出结构化选项与工作区边界说明 |
+| **A14** | **间接写入门禁**：活动库是用户库时执行 `reload action=enable` | **拒绝执行**并说明「活动窗口是用户库」；用户库的启用列表与受限模式**保持不变** | ❌ **未按设计实现**：`reload` 只返回「是哪个库应答」（`activeWindowVault()`）用于失败上下文，没有「活动库=用户库则拒绝」的前置门禁；用户库之所以未被改动是**沙箱判定最终写入无效**的结果，而非明确拒绝。设计意图尚未落地 |
+| **A15** | 全程零切窗 | 一次「改动 → 验证」的完整循环里，用户 Obsidian 的**活动窗口不发生任何变化**（含不得为让命令成功而 `vault-open`） | ✅ 已约定并落实到工具：`vault-open` 只在 `obsidian_plugin_vault action=ensure` 里出现，默认循环（build → test → e2e）完全不含；skill 明确禁止为让命令成功而抬窗口 |
 
 ---
 
@@ -837,7 +837,8 @@ P2/P3 预留（尚未创建）：`harness.ts`（`obsidian_plugin_test` 编排）
 | CLI 挂死/卡顿（本次多次复现） | 工具返回慢或误判 | 超时 + 重试 + 空输出判定；必要时提示重启 App/重注册 |
 | 信任弹窗与**每库**受限模式绑定（localStorage `enable-plugin-<appId>`） | 在测试库上的信任不会波及其它库；但弹窗本身会阻塞加载 | 只引导不代点；三态报告；提前预警 |
 | **我们主动 `vault-open` 会切走用户窗口、抢焦点** | 开发期间用户无法做别的事（真实反馈） | **默认路径不含任何切窗动作**（§2.9）；L4 沙箱实例成为默认档；L3 只在验证用户真实环境时使用，且必须确认；返回值显式声明「本次切换了前台」 |
-| **CLI 间接改写用户库**（`plugin:enable` / `unrestrict` 作用于活动窗口） | 用户库的插件启用列表 / 受限模式被悄悄改掉，**沙箱无法拦截** | 执行前**验证活动库身份**，不是工作区测试库即拒绝（§2.10 / A14） |
+| L4 实例自身的窗口在启动瞬间仍会出现约 1 秒 | 反复跑套件时表现为「闪屏」，虽非用户的实例但仍是干扰 | 窗口由 Obsidian 自举时自行创建并显示，**任何启动开关都拦不住**（`--headless`/`--headless=new`/`--hidden` 均实测无效，service 也无可见性选项）；只能从应用内 `hide()`，这是最早的隐藏点。缓解：`e2e:watch` 复用同一实例，把这次启动成本从「每次运行」降到「一次会话」 |
+| **CLI 间接改写用户库**（`plugin:enable` / `unrestrict` 作用于活动窗口） | 用户库的插件启用列表 / 受限模式被悄悄改掉，**沙箱无法拦截** | ⚠️ **对策未落地**：设计为「执行前验证活动库身份，不是工作区测试库即拒绝」（§2.10 / A14），实现目前只返回「是哪个库应答」用于失败上下文。用户库当前未被改动，是**沙箱判定最终写入无效**的结果，而不是明确拒绝——须补上前置门禁 |
 | 把用户的库当成测试目标 | 用户真实笔记与配置面临风险 | **写入范围门禁**（§2.10 / A13）：只写工作区内 TestVault；用户库只读；例外仅限一次性显式授权 |
 | L4 依赖下载 Obsidian/Electron | 离线/受限网络下不可用 | 明确报出原因并回退 L3（须确认）或 L1+L2；不做静默降级 |
 | L4 的实例与用户实例版本不一致 | 结论可能与用户环境不符 | 沙箱实例支持**指定版本**（含 `earliest` = 自动取 manifest 的 `minAppVersion`），可在多版本上跑同一套断言（A12）；与用户环境相关的结论仍以 L3 为准 |

@@ -35,7 +35,9 @@ const E2E_VAULT = "{{VAULT_DIR}}";
 export const config: Options.Testrunner = {
 	runner: "local",
 	framework: "mocha",
-	specs: ["./e2e/specs/**/*.e2e.ts"],
+	// Rendered by obsidian_plugin_e2e so a custom scaffold directory is collected
+	// too: with this hardcoded, `dir` moved the spec but the runner never found it.
+	specs: ["{{SPECS_GLOB}}"],
 	maxInstances: 1,
 	services: ["obsidian"],
 	capabilities: [
@@ -57,8 +59,11 @@ export const config: Options.Testrunner = {
 				// A COPY of the vault is used, so tests never write to your notes.
 				vault: E2E_VAULT,
 				copy: true,
-				// Install the plugin under test from the project directory.
-				plugins: ["."],
+				// Where the built artifacts live, relative to this file. The
+				// service wants main.js directly under this path; a project that
+				// builds into its own test vault therefore points here at that
+				// vault's plugin folder, not at the project root.
+				plugins: ["{{PLUGIN_DIR}}"],
 			},
 		},
 	],

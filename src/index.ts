@@ -346,7 +346,7 @@ export function apply(ctx: any, config: any) {
 
   ctx.tools.register(defineTool({
     name: "obsidian_plugin_deploy",
-    description: "Install built artifacts (main.js, manifest.json, styles.css) into a vault's .obsidian/plugins/<id>/ and add the id to that vault's community-plugins.json, then remember the vault in dsh.obsidian.json. Reports the three states separately: files written, enabled in the vault list, and whether the running app actually loaded it (loading is verified in a later phase).",
+    description: "Install built artifacts (main.js, manifest.json, styles.css) into a vault's .obsidian/plugins/<id>/ and add the id to that vault's community-plugins.json, then remember the vault in dsh.obsidian.json. Reports the three states separately: files written, enabled in the vault list, and whether the running app loaded it — this step installs files only, so activation is verified with obsidian_plugin_reload plus obsidian_plugin_inspect.",
     parameters: {
       projectDir: { type: "string", required: true, description: "Plugin project directory (absolute or workspace-relative)." },
       vault: { type: "string", description: "Target vault directory. Omit to reuse the dsh.obsidian.json binding, then the TestVault/ convention next to the project." },
@@ -410,6 +410,7 @@ export function apply(ctx: any, config: any) {
       const call = makeCall(exec);
       return reloadPlugin(args, {
         cli: { signal: call.signal },
+        workspaceRoot: call.workspaceRoot,
         readManifestId: async (projectDir: string) => {
           const dir = await fs.resolve(projectDir, call.workspaceRoot);
           const manifest = await fs.readJson(join(dir, "manifest.json"));

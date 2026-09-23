@@ -16,9 +16,9 @@
 ### tools
 
 - **`obsidian_plugin_scaffold`**：使用官方 [obsidianmd/obsidian-sample-plugin](https://github.com/obsidianmd/obsidian-sample-plugin) 模板生成合规插件骨架，内置命名/提交规则校验。
-- **`obsidian_plugin_build`**：把插件项目打包成可加载的 `main.js`（CommonJS，`obsidian` 外部化）并做静态自检（L1 档）；入口按「显式 `entry` → `src/main.ts` → 仓库根 `main.ts` → 项目自身的 esbuild/rollup/vite 配置 → `package.json` main」解析，产物按「项目根 → 配置里的 `outfile`/`outdir`/`file`/`dir` → 项目内测试库布局 → 有界搜索（含 `<dir>/.obsidian/plugins/<id>/`）」解析，失败时列出全部尝试过的位置，另可用 `outDir` 直接指定产物目录；构建三级降级（项目自身的 production `build` 脚本——**只要存在打包配置就优先走它**，因为配置里带的插件无法从命令行补齐 → 项目本地 esbuild 直调，用于没有配置可遵循的项目，或作为显式的非 production 选择（会警告未应用项目插件）→ 给出可操作的报错），不启动 watch 进程，并报告实际使用的层级。
+- **`obsidian_plugin_build`**：把插件项目打包成可加载的 `main.js`（CommonJS，`obsidian` 外部化）并做静态自检（L1 档）；入口按「显式 `entry` → `src/main.ts` → 仓库根 `main.ts` → 项目自身的 esbuild/rollup/vite 配置 → `package.json` main」解析，产物按「项目根 → 配置里的 `outfile`/`outdir`/`file`/`dir` → 项目内测试库布局 → 有界搜索（含 `<dir>/.obsidian/plugins/<id>/`）」解析，失败时列出全部尝试过的位置，另可用 `outDir` 直接指定产物目录；构建三级降级（项目自身的 production `build` 脚本——**只要项目声明了该脚本就优先走它**，因为配置里带的插件无法从命令行补齐 → 项目本地 esbuild 直调，用于没有配置可遵循的项目，或作为显式的非 production 选择（会警告未应用项目插件）→ 给出可操作的报错），不启动 watch 进程，并报告实际使用的层级。
 - **`obsidian_plugin_deploy`**：把构建产物安装进 `<vault>/.obsidian/plugins/<id>/`，并把插件 id 合并进该库的 `community-plugins.json`（保留既有条目），随后把该 vault 记入 `dsh.obsidian.json`；分列报告 `written` / `enabled` / `active` 三态（`active` 在后续阶段前恒为 `unknown`）。
-- **`obsidian_plugin_inspect`**：只读观测运行中的 App —— `status` 一次给出体检事实（App 实际版本、已注册的库、**实际应答的库**、该库的受限模式状态、目标插件是否已安装/启用/版本匹配、Obsidian 的信任弹窗是否待确认），另有 `errors` / `console` / `dom` / `css` / `screenshot` / `trustCheck`；绝不改动 App。
+- **`obsidian_plugin_inspect`**：只读观测运行中的 App —— `status` 一次给出体检事实（App 实际版本、已注册的库、**实际应答的库**、该库的受限模式状态、目标插件是否已安装/启用/版本匹配、Obsidian 的信任弹窗是否待确认），另有 `errors` / `console` / `dom` / `css` / `screenshot` / `trustCheck`；对你的库与插件只读；但 `action=console` 会附加/分离抓取调试器（附加期间 `plugin:reload` 会卡住）、`clear` 会清空 App 的缓冲、`screenshot` 会写出图片文件。
 - **`obsidian_plugin_vault`**：管理真机验证用的库 —— `status`（已注册的库、当前活动窗口、激活将要做什么）、`ensure`（不带 `confirm` 只描述后果；带 `confirm=true` 才会登记/打开该库，Obsidian 会切到前台，随后由 App 自证哪个库是活动库，并如实上报 Obsidian 的信任弹窗而不代为确认）、`close`（macOS）、`prune`（尚未实现）。
 - **`obsidian_plugin_reload`**：让代码改动在运行中的 App 生效 —— `reload`（默认）/ `enable` / `disable` / `rescan`（刷新 App 的插件清单索引：Obsidian 只在库加载时扫描一次插件目录，刚部署的插件在重扫前对所有插件命令都不可见）/ `unrestrict`（**关闭**该库的受限模式——逐库的安全设置、会重载窗口，因此必须是显式动作，绝不作为副作用）；重载后校验插件是否真的注册进 App，并回报插件打印的内容。
 - **`obsidian_plugin_test`**：离线冒烟（L2 档）——在纯 Node 里用桩化的 Obsidian API 加载构建产物，真跑一遍生命周期（默认导出是 `Plugin` 子类、`onload()` 执行、注册动作发生、`onunload()` 清理、无未处理的 rejection），因此**不需要安装 Obsidian**；会真实解析项目自身的 `@codemirror/*` 与 `@lezer/*`，DOM 相关插件可用项目自带的 jsdom（缺 jsdom 时报告会写明并给出安装命令）；可用可选场景文件（`dsh/scenarios/<name>.mjs`，收到 `{ plugin, app, stub }`）扩展。它**不验证运行期行为**：报告固定标注这是桩环境，点名本次没有覆盖什么（例如没有 DOM 宿主时，注册为编辑器扩展的 UI 代码未被检验），并指向 e2e / screenshot 做真实验收。
@@ -35,12 +35,12 @@
 | --- | --- | --- |
 | **L1** 静态 | `obsidian_plugin_build` 内的产物 / 模块格式 / manifest 检查 | 无 |
 | **L2** 离线冒烟 | `obsidian_plugin_test` 在纯 Node 里用桩化的 Obsidian API 加载产物；无需 Obsidian | 无 |
-| **L3** 用户的 Obsidian | `obsidian_plugin_vault` / `obsidian_plugin_reload` / `obsidian_plugin_inspect` / `obsidian_plugin_eval` 经 CLI 作用于**你自己的**运行中 App，仅用于验证你的真实环境 | 会切换你的窗口、抢焦点 |
-| **L4** 沙箱 Obsidian | `obsidian_plugin_e2e` + 项目自建的 WebdriverIO 套件运行一个独立 Obsidian（独立配置、库副本，实例窗口在任何 spec 运行前即被隐藏） | 无——开发循环的默认档 |
+| **L3** 用户的 Obsidian | `obsidian_plugin_vault` / `obsidian_plugin_reload` / `obsidian_plugin_inspect` / `obsidian_plugin_eval` 经 CLI 作用于**你自己的**运行中 App，仅用于验证你的真实环境 | 窗口作用域：命令作用于当前在前台的那个库，否则失败（或从错误的库作答）。唯一会切换你的窗口、抢走焦点的是 `obsidian_plugin_vault action=ensure confirm=true` |
+| **L4** 沙箱 Obsidian | `obsidian_plugin_e2e` + 项目自建的 WebdriverIO 套件运行一个独立 Obsidian（独立配置、库副本，实例窗口在任何 spec 运行前即被隐藏） | 对**你的** Obsidian 无干扰——不切、不抢、不显示。沙箱自己的窗口在启动瞬间仍会出现约 1 秒（无任何开关可抑制；`e2e:watch` 只需付一次） |
 
 **检查通过不等于验收。** `obsidian_plugin_build` 通过不代表插件可用，`obsidian_plugin_test` 的 PASS 也不代表 UI 已验证。只要改动涉及界面、渲染或交互，就必须在沙箱档（`obsidian_plugin_e2e`）或对着运行中的 App（`obsidian_plugin_inspect action=screenshot`）**真正看到它**，并在回复里说明看到了什么。
 
-只允许修改**会话工作区内创建的测试库**；你自己的库是只读的，包括 CLI 侧的间接写入——`plugin:enable` / `unrestrict` 改写的是当前活动窗口那个库，工具会拒绝对非测试库执行。默认路径绝不切换你的窗口、绝不抢焦点。
+写入被限制在会话工作区内：文件写入由沙箱拒绝；沙箱看不见的 App 侧写入——`plugin:enable` / `plugin:disable` / `unrestrict`，它们改写的是当前活动窗口那个库——当目标路径在工作区外时由工具自行拒绝（`obsidian_plugin_reload`）。仅以「当前前台是哪个库」指代的目标无法在这里定位，所以需要这道检查时请显式给出库路径。默认路径绝不切换你的窗口、绝不抢焦点。
 
 ## 安装
 

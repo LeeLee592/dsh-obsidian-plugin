@@ -1,14 +1,16 @@
 // obsidian_plugin_deploy — install built artifacts into a vault.
 //
-// P0 scope (DESIGN.md §4.2): the offline path only. Files are written and the
-// vault's enable list is updated; making the plugin actually load requires the
-// Obsidian CLI and belongs to P1.
+// Scope (DESIGN.md §4.2): the offline path. Files are written and the vault's
+// enable list is updated here; whether the running app then loads the plugin is
+// a separate, explicit step — obsidian_plugin_reload (rescan/enable) and
+// obsidian_plugin_inspect (status) answer that, and this tool points at them
+// rather than importing the Obsidian CLI into a file-installation path.
 //
 // The three states are reported separately and never conflated:
 //
 //   written  — artifacts are on disk in the vault
 //   enabled  — the id is present in the vault's community-plugins.json
-//   active   — the running app actually loaded the plugin (needs P1)
+//   active   — the running app actually loaded the plugin (not knowable here)
 //
 // "written" must never be reported as "working".
 
@@ -136,14 +138,16 @@ export function renderVaultReport(report: VaultReport, text = ""): string {
     `  vault:   resolved via ${report.vaultSource}`,
     `  files:   written (${report.written.join(" · ")})`,
     `  enabled: ${report.enabled ? "yes (id present in community-plugins.json)" : "no"}`,
-    `  active:  unknown — requires the running app (P1: obsidian_plugin_vault/reload)`,
-    'Note: files are on disk; whether the plugin loads is verified in P1.',
+    "  active:  unknown — files are installed; the running app has not been asked",
+    "Note: this step only writes files. Verify that the plugin actually loads with",
+    "      obsidian_plugin_reload (rescan after a first install, then enable) and read",
+    "      the result back with obsidian_plugin_inspect action=status.", 
   ];
   for (const w of report.warnings) lines.push(`  ! ${w}`);
   lines.push(
-    `Next: open "${report.vault}" in Obsidian and enable the plugin under Settings → Community plugins. ` +
-      "If that vault is already open, reload it (or restart Obsidian): Obsidian reads the enable list at vault load, " +
-      "and this phase has no live-app integration.",
+    `Next: obsidian_plugin_reload action=rescan (Obsidian only scans .obsidian/plugins at vault load, so a ` +
+      "newly installed plugin is invisible without it), then action=enable. Both act on whichever vault is in " +
+      `front, so confirm with obsidian_plugin_inspect action=status that "${report.vault}" is the vault that answered.`,
   );
   return lines.join("\n");
 }

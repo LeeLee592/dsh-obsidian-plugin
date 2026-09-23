@@ -271,12 +271,3 @@ export function buildArgs(production: boolean, entry = "src/main.ts"): string[] 
     "--outfile=main.js",
   ];
 }
-
-/** Exposed for tests: artifact paths a built project must produce. */
-export function artifactPaths(projectDir: string): { main: string; manifest: string; styles: string } {
-  return {
-    main: join(projectDir, "main.js"),
-    manifest: join(projectDir, "manifest.json"),
-    styles: join(projectDir, "styles.css"),
-  };
-}

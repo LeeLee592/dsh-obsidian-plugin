@@ -25,11 +25,11 @@ Four tiers; the default development loop is L1 + L2 + L4:
 - L1 static: artifact / module-format / manifest checks inside obsidian_plugin_build; no interference.
 - L2 offline smoke: obsidian_plugin_test loads the bundle in plain Node against a stubbed Obsidian API; no Obsidian needed, no interference.
 - L3 your Obsidian: obsidian_plugin_vault / obsidian_plugin_reload / obsidian_plugin_inspect / obsidian_plugin_eval act on your own running app through the CLI; this switches your window and steals focus, so it is only for verifying your real environment.
-- L4 sandboxed Obsidian: the WebdriverIO suite scaffolded by obsidian_plugin_e2e runs a separate Obsidian (isolated config directory + vault copy, its window hidden before any spec runs); zero interference.
+- L4 sandboxed Obsidian: the WebdriverIO suite scaffolded by obsidian_plugin_e2e runs a separate Obsidian (isolated config directory + vault copy, its window hidden before any spec runs); no interference with yours in any way — the sandbox's own window is still on screen ~1s at startup, which no launch flag prevents.
 
 Acceptance rule (mandatory): obsidian_plugin_build passing does not mean the plugin works, and obsidian_plugin_test PASSing does not mean the UI was verified. If a change touches interface, rendering or interaction, it must actually be seen — in the sandboxed e2e tier (obsidian_plugin_e2e), or against the running app (obsidian_plugin_inspect action=screenshot) — and the reply must say what was seen.
 
-Only test vaults created inside the session workspace may be modified; your own vaults are read-only, including CLI-side writes — plugin:enable / unrestrict rewrite whichever vault is in the active window, so the tools refuse to run them against a non-test vault. The default path never switches your window or steals focus.
+Writes are fenced to the session workspace: file writes are denied by the sandbox, and the app-side writes it cannot see — plugin:enable / plugin:disable / unrestrict, which rewrite whichever vault is in the active window — are refused by obsidian_plugin_reload when the target path is outside the workspace. Name the vault when you want that check to apply. The default path never switches your window or steals focus.
 
 【Naming rules】(enforced by the tools; use for self-checks too)
 - id: lowercase letters/digits/dashes/underscores, no "obsidian", not ending with "plugin".

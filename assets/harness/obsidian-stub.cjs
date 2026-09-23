@@ -15,28 +15,16 @@
 /** DOM listeners registered by each plugin instance, for unload cleanup. */
 const domListenerRegistry = new WeakMap();
 
-const REGISTER_METHODS = [
-  "addCommand",
-  "addRibbonIcon",
-  "addStatusBarItem",
-  "addSettingTab",
-  "registerView",
-  "registerEvent",
-  "registerDomEvent",
-  "registerInterval",
-  "registerEditorExtension",
-  "registerMarkdownPostProcessor",
-  "registerEditorSuggest",
-  "registerHoverLinkSource",
-  "registerObsidianProtocolHandler",
-  "registerExtensions",
-];
 
 class Component {
   constructor() {
     this._loaded = false;
     this._children = [];
-    /** Keys of everything this component registered, for the cleanup assertion. */
+    /**
+     * Keys of everything this component registered. The harness reads this once,
+     * after load, to report what the plugin registered — there is no before/after
+     * comparison across unload, so it must not be described as a cleanup check.
+     */
     this._registrations = [];
   }
 
@@ -53,8 +41,9 @@ class Component {
     if (!this._loaded) return;
     this.onunload();
     this._unloadDomEvents?.();
-    // Obsidian detaches registered resources on unload; recording keeps the
-    // count observable so the harness can flag a plugin that never cleans up.
+    // Obsidian detaches registered resources on unload. The stub releases the DOM
+    // listeners it owns; it does not audit which registrations a plugin left
+    // behind, and the harness only checks that unload() itself does not throw.
     for (const child of this._children) {
       try {
         child.unload();
@@ -125,23 +114,39 @@ class Events {
       list.filter((entry) => entry !== cb),
     );
   }
-  tryTrigger(name, ...args) {
-    if (!this._handlers.has(name)) return false;
-    this.trigger(name, ...args);
-    return true;
-  }
   trigger(name, ...args) {
     for (const cb of this._handlers.get(name) ?? []) cb(...args);
   }
 }
 
+/**
+ * The Obsidian API version this stub advertises, in one place: it is both the
+ * exported `apiVersion` and the answer `requireApiVersion` compares against.
+ */
+const STUB_API_VERSION = "1.8.0";
+
+/** Private app key carrying the seeded data.json for this stub instance. */
+const PLUGIN_DATA_SEED = Symbol("obsidian-stub.pluginData");
+
 class Plugin extends Component {
   constructor(app, manifest) {
     super();
+    const seed = Object.getOwnPropertyDescriptor(app, PLUGIN_DATA_SEED);
+    const hasSeed = seed !== undefined;
     this.app = app;
     this.manifest = manifest;
-    /** Data returned by loadData(); the harness seeds it from data.json. */
-    this._stubData = undefined;
+    // Default is created per instance, but an own property would SHADOW the
+    // harness's `Plugin.prototype._stubData` seed and make every loadData()
+    // return undefined while the real app returns data.json. Only set it when
+    // nothing was seeded.
+    /**
+     * Data returned by loadData(), persisted back by saveData().
+     *
+     * Seeded from the instance's own class rather than a prototype property: the
+     * class is handed out by createObsidianStub(), so two stubs in one process
+     * would otherwise share one seeded value.
+     */
+    this._stubData = hasSeed ? seed.value.value : undefined;
     this._savedData = [];
   }
 
@@ -210,11 +215,6 @@ class Plugin extends Component {
     return id;
   }
 
-  registerMarkdownPostProcessor(processor) {
-    this._registrations.push("registerMarkdownPostProcessor");
-    this.app.workspace.markdownPostProcessors.push(processor);
-  }
-
   registerEditorSuggest() {
     this._registrations.push("registerEditorSuggest");
   }
@@ -225,9 +225,15 @@ class Plugin extends Component {
     this.app.workspace.markdownCodeBlockProcessorSortOrders[language] = sortOrder;
   }
 
+  /**
+   * Obsidian stores the processor itself; `sortOrder` is kept alongside it.
+   * Pushing a `{processor, sortOrder}` object would break any caller that reads
+   * the array as a list of callables.
+   */
   registerMarkdownPostProcessor(processor, sortOrder) {
     this._registrations.push("registerMarkdownPostProcessor");
-    this.app.workspace.markdownPostProcessors.push({ processor, sortOrder });
+    this.app.workspace.markdownPostProcessors.push(processor);
+    if (sortOrder !== undefined) this.app.workspace.markdownPostProcessorSortOrders.push(sortOrder);
   }
 
   registerHoverLinkSource(id, info) {
@@ -323,6 +329,8 @@ class Modal {
 class Notice {
   constructor(message) {
     this.message = message;
+    // Scenario-facing: `Notice.instances` is the only way to assert that a
+    // notice was raised. Nothing inside the harness reads it.
     Notice.instances.push(message);
   }
 }
@@ -565,13 +573,13 @@ class Workspace extends Events {
     this.viewFactories = {};
     this.editorExtensions = [];
     this.markdownPostProcessors = [];
+    this.markdownPostProcessorSortOrders = [];
     this.markdownCodeBlockProcessors = {};
     this.markdownCodeBlockProcessorSortOrders = {};
     this.hoverLinkSources = {};
     this.protocolHandlers = {};
     this.openModals = [];
     this.activeLeaf = new WorkspaceLeaf();
-    this.layoutReady = true;
   }
   getLeaf() {
     return new WorkspaceLeaf();
@@ -604,6 +612,7 @@ class Workspace extends Events {
 function createObsidianStub(options = {}) {
   const workspace = new Workspace();
   const vault = new Vault();
+  const pluginData = options.pluginData;
 
   const app = {
     appId: "offline-stub",
@@ -701,12 +710,15 @@ function createObsidianStub(options = {}) {
     Platform: { isDesktop: true, isMobile: false, isDesktopApp: true, isMobileApp: false, isIosApp: false, isAndroidApp: false },
     moment: stubMoment(),
     normalizePath: (path) => String(path).replace(/\\/g, "/").replace(/\/+/g, "/").replace(/^\/|\/$/g, ""),
+    // Recorded ids are readable back through getIcon() below, so a scenario can
+    // assert an icon was registered; recording without any reader would be a
+    // write-only field pretending to be test surface.
     addIcon: (id) => {
       stub.__icons = stub.__icons ?? {};
       stub.__icons[id] = true;
     },
     setIcon: () => {},
-    getIcon: () => null,
+    getIcon: (id) => (stub.__icons && stub.__icons[id] ? {} : null),
     getLanguage: () => "en",
     requestUrl,
     prepareFuzzySearch: () => () => null,
@@ -726,11 +738,15 @@ function createObsidianStub(options = {}) {
     base64ToArrayBuffer: () => new ArrayBuffer(0),
     stringifyYaml: () => "",
     parseYaml: () => ({}),
-    apiVersion: "1.8.0",
-    /** Version gate plugins use to branch on Obsidian features. */
+    apiVersion: STUB_API_VERSION,
+    /**
+     * Version gate plugins use to branch on Obsidian features. Reads the same
+     * constant the exported `apiVersion` does: two independent literals would let
+     * a version bump leave the gate answering for the old version.
+     */
     requireApiVersion: (version) => {
       const want = String(version).split(".").map((n) => Number.parseInt(n, 10) || 0);
-      const have = "1.8.0".split(".").map((n) => Number.parseInt(n, 10) || 0);
+      const have = STUB_API_VERSION.split(".").map((n) => Number.parseInt(n, 10) || 0);
       for (let i = 0; i < 3; i++) {
         if ((have[i] ?? 0) > (want[i] ?? 0)) return true;
         if ((have[i] ?? 0) < (want[i] ?? 0)) return false;
@@ -822,10 +838,11 @@ function createObsidianStub(options = {}) {
     posToOffset: () => 0,
     offsetToPos: () => ({ line: 0, ch: 0 }),
     __app: app,
-    __workspace: workspace,
-    __vault: vault,
     __createElement: createStubElement,
   };
+
+  // Seed before the Proxy wraps it, so construction sees it on the app object.
+  withPluginData(app, pluginData);
 
   // Unknown exports must fail loudly rather than resolve to undefined.
   return new Proxy(stub, {
@@ -861,12 +878,17 @@ function stubMoment() {
   return moment;
 }
 
+/** Attach the seeded plugin data without letting it appear in app enumeration. */
+function withPluginData(app, data) {
+  Object.defineProperty(app, PLUGIN_DATA_SEED, { value: { value: data }, enumerable: false, configurable: true });
+  return app;
+}
+
 module.exports = {
   createObsidianStub,
   createStubElement,
   Plugin,
   Component,
   Notice,
-  REGISTER_METHODS,
   stubMoment,
 };

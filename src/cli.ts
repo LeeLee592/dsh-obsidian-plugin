@@ -16,8 +16,8 @@
 import { run } from "./proc.js";
 import type { RunResult } from "./proc.js";
 
-export const DEFAULT_CLI_TIMEOUT_MS = 20_000;
-export const DEFAULT_CLI_RETRIES = 1;
+const DEFAULT_CLI_TIMEOUT_MS = 20_000;
+const DEFAULT_CLI_RETRIES = 1;
 
 export type CliStatus =
   /** The command produced usable output. */
@@ -124,11 +124,6 @@ export function runCli(args: string[], options: CliOptions = {}): CliResult {
     if (status !== "hang") return last;
   }
   return last!;
-}
-
-/** Convenience: the command reported success. */
-export function cliOk(result: CliResult): boolean {
-  return result.status === "ok";
 }
 
 /**

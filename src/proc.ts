@@ -31,7 +31,7 @@ export interface RunResult {
   errorMessage?: string;
 }
 
-export const DEFAULT_TIMEOUT_MS = 120_000;
+const DEFAULT_TIMEOUT_MS = 120_000;
 
 export function run(spec: RunSpec): RunResult {
   const result = spawnSync(spec.command, spec.args ?? [], {
@@ -62,12 +62,4 @@ export function run(spec: RunSpec): RunResult {
   if (result.status !== 0) return { ...base, ok: false, reason: "nonzero-exit" };
 
   return { ...base, ok: true };
-}
-
-/** Whether a usable executable exists at an absolute path (or resolves on PATH). */
-export function hasExecutable(path: string): boolean {
-  const probe = run({ command: path, args: ["--version"], timeoutMs: 10_000 });
-  // A binary that exists but rejects `--version` still proves existence; only
-  // a spawn failure means "missing".
-  return probe.reason !== "spawn-error";
 }

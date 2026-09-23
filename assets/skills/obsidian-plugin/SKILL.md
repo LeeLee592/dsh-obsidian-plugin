@@ -17,13 +17,13 @@ metadata:
 | 工具 | 用途 |
 |---|---|
 | `obsidian_plugin_scaffold` | 基于官方 obsidian-sample-plugin 模板生成合规插件骨架，内置命名/提交规则校验 |
-| `obsidian_plugin_build` | 把插件项目打包成可加载的 main.js（CommonJS，obsidian 外部化）并做静态自检（L1）；入口与产物从项目自身配置解析（`entry` / `outDir` 可显式指定，失败时列出全部尝试过的位置）；只要有打包配置就优先跑项目自身的 production `build` 脚本，否则本地 esbuild 直调；绝不启动 watch，并报告实际使用的层级 |
+| `obsidian_plugin_build` | 把插件项目打包成可加载的 main.js（CommonJS，obsidian 外部化）并做静态自检（L1）；入口与产物从项目自身配置解析（`entry` / `outDir` 可显式指定，失败时列出全部尝试过的位置）；只要项目声明了 production `build` 脚本就优先跑它（判据是脚本，不是配置），否则本地 esbuild 直调；绝不启动 watch，并报告实际使用的层级 |
 | `obsidian_plugin_deploy` | 把构建产物装进 vault 的 .obsidian/plugins/<id>/ 并更新该库的 community-plugins.json，随后把 vault 记入 dsh.obsidian.json；written / enabled / active 三态分列报告 |
-| `obsidian_plugin_inspect` | 只读观测运行中的 App，绝不改动它：status 一次给出体检事实（App 版本、已注册的库、实际应答的库、该库受限模式、目标插件安装/启用/版本匹配、信任弹窗是否待确认），另有 errors / console / dom / css / screenshot / trustCheck |
+| `obsidian_plugin_inspect` | 只读观测运行中的 App，不写你的库与插件（但 console 会附加抓取调试器、clear 清空缓冲、screenshot 写出图片文件）：status 一次给出体检事实（App 版本、已注册的库、实际应答的库、该库受限模式、目标插件安装/启用/版本匹配、信任弹窗是否待确认），另有 errors / console / dom / css / screenshot / trustCheck |
 | `obsidian_plugin_vault` | 管理真机验证用的库：status 报告已注册的库、当前活动窗口与激活将要做什么；ensure 是两步确认（不带 confirm 只描述后果，confirm=true 才登记/打开该库，随后由 App 自证活动库并如实上报信任弹窗）；close（macOS）；prune 尚未实现 |
 | `obsidian_plugin_reload` | 让代码改动在运行中的 App 生效：reload / enable / disable / rescan（重扫插件清单索引：Obsidian 只在库加载时扫描一次插件目录）/ unrestrict（显式关闭该库受限模式，会重载窗口）；重载后校验插件是否真的注册进 App 并回报插件日志 |
 | `obsidian_plugin_test` | 离线冒烟（L2）：在纯 Node 里用桩化的 Obsidian API 加载构建产物，真跑一遍生命周期（默认导出是 Plugin 子类、onload() / onunload()、注册动作、无未处理 rejection）；不需要 Obsidian。**不验证运行期行为**：报告固定标注桩环境，并**明确写出本次没覆盖到什么**（注册为编辑器扩展的 UI 代码在无 DOM 宿主时不会执行）；DOM 相关插件需要项目自带 jsdom |
-| `obsidian_plugin_e2e` | 脚手架化沙箱端到端测试（L4，零干扰）：init 写入 WebdriverIO + wdio-obsidian-service 配置（独立配置目录 + 库副本的独立 Obsidian，不切窗口、不抢焦点）并加入 e2e / e2e:watch 脚本；status 只报告现状与确切的安装命令、不写文件；runner 依赖留在项目里 |
+| `obsidian_plugin_e2e` | 脚手架化沙箱端到端测试（L4，对你的 Obsidian 零干扰）：init 写入 WebdriverIO + wdio-obsidian-service 配置（独立配置目录 + 库副本的独立 Obsidian，不切窗口、不抢焦点；实例自身窗口在启动瞬间约 1 秒可见，任何开关都拦不住）并加入 e2e / e2e:watch 脚本；status 只报告现状与确切的安装命令、不写文件；runner 依赖留在项目里 |
 | `obsidian_plugin_eval` | 在运行中的 App 里执行 JavaScript 并返回结果——实时状态的逃生舱：读真实运行时状态（插件实例、workspace、metadataCache）、驱动一次交互、不重构建就试一个修法。**唯一的高特权工具**：需审批，返回会把执行的代码回显出来；代码触及窗口焦点时（如 `electron.remote.getCurrentWindow().focus()`）会警告，因为那会抢走用户焦点。只读能回答的用 `obsidian_plugin_inspect`（免费、无需审批） |
 | `obsidian_plugin_validate` | 校验 manifest 必填字段、命名规则、versions.json 映射、package.json 版本一致性，并运行 eslint-plugin-obsidianmd 检查 |
 | `obsidian_plugin_version` | 同步 manifest.json / versions.json / package.json 三处版本 |
@@ -42,13 +42,13 @@ metadata:
 4. **离线冒烟** — 调用 `obsidian_plugin_test` 在纯 Node 里用桩化的 Obsidian API 加载产物，秒级挡住「加载即崩」（L2，不需要 Obsidian）；它不验证运行期行为，这就是下一步存在的原因。
 5. **部署** — 调用 `obsidian_plugin_deploy` 装进测试库（TestVault）并写入启用列表；注意这一步只表示文件已写入、已启用，**不验证运行中的 Obsidian 是否真的加载了插件**（是否加载交给下一步的沙箱 E2E 或真机验证）。
 6. **沙箱化 E2E** — 首次用 `obsidian_plugin_e2e action=init` 在项目里接好 WebdriverIO + wdio-obsidian-service 套件，然后由项目自己跑 `pnpm run e2e`（L4）：独立 Obsidian 实例 + 独立配置目录 + 库副本，**不切用户窗口、不抢焦点**，是验证真实运行期行为的默认档；接入指引见 `reference/e2e-sandboxed.md`。
-7. **真机验证（L3，仅在需要验证用户真实环境时）** — 会切换窗口、抢焦点，必须显式确认：先 `obsidian_plugin_vault action=ensure`（带 `confirm=true` 才会真正登记/打开）把测试库带到前台，再 `obsidian_plugin_reload` 重载并确认插件确实加载，最后用 `obsidian_plugin_inspect` 只读观测（status / errors / console / dom / css / screenshot）。
+7. **真机验证（L3，仅在需要验证用户真实环境时）** — 窗口作用域：命令作用于当前前台的库，否则失败。唯一会切换窗口、抢焦点的是 `obsidian_plugin_vault action=ensure confirm=true`，所以它必须显式确认：先 `obsidian_plugin_vault action=ensure`（带 `confirm=true` 才会真正登记/打开）把测试库带到前台，再 `obsidian_plugin_reload` 重载并确认插件确实加载，最后用 `obsidian_plugin_inspect` 只读观测（status / errors / console / dom / css / screenshot）。
    - 只读能回答的，**不要**升级到 `obsidian_plugin_eval`：它是唯一的高特权工具（在用户 App 里执行代码、需审批），用于「读真实运行时状态 / 驱动一次交互 / 不重构建就试一个修法」。它的返回会回显执行的代码；若代码触及窗口焦点，会明确警告（抢焦点会打断用户，能用沙箱档就别用）。
 8. **校验** — 调用 `obsidian_plugin_validate` 检查结构与命名并运行 eslint；按返回错误修正后重跑，直到通过。
 9. **版本** — 发布时调用 `obsidian_plugin_version` 统一升级版本号。
 10. **提交** — 按「校验与提交」表格完成社区扫描与发布准备。
 
-写入范围是硬门禁：只允许修改工作区内创建的测试库，用户自己的库只读（包括 CLI 侧的间接写入——`plugin:enable` / `unrestrict` 改写的是活动窗口那个库，工具会拒绝对非测试库执行）。
+写入范围是硬门禁：只允许修改工作区内创建的测试库。文件写入由沙箱拒绝；沙箱看不见的 App 侧写入——`plugin:enable` / `plugin:disable` / `unrestrict` 改写的是活动窗口那个库——在目标路径位于工作区外时由 `obsidian_plugin_reload` 拒绝，因此需要这道检查时必须显式给出库路径（仅说「当前前台那个库」无法在这里定位）。
 
 ## 症状 → 动作
 

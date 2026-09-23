@@ -1,7 +1,7 @@
 // Offline smoke harness: load a built plugin bundle in plain Node and exercise
 // its lifecycle (DESIGN.md §4.3).
 //
-//   node harness.cjs <projectDir> [--bundle <path>] [--scenario <file>]
+//   node harness.cjs <projectDir> [--bundle <path>] [--scenario <file>] [--temp-dir <dir>]
 //
 // Load order is load-bearing — this exact sequence is what makes a real
 // minified bundle load (verified against float-mark, editing-toolbar and
@@ -25,7 +25,7 @@ const { createRequire } = require("node:module");
 const { existsSync, readFileSync, copyFileSync, rmSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { dirname, join, resolve } = require("node:path");
-const { createObsidianStub, createStubElement } = require("./obsidian-stub.cjs");
+const { createObsidianStub } = require("./obsidian-stub.cjs");
 
 const HOST_GLOBALS = [
   "window",
@@ -188,10 +188,8 @@ async function main() {
   }
   result.peerModules = [...peerPaths.keys()];
 
-  const stub = createObsidianStub();
+  const stub = createObsidianStub({ pluginData: readPluginData(projectDir, manifest.id) });
   const app = stub.__app;
-  seedPluginData(projectDir, manifest.id);
-  stub.Plugin.prototype._stubData = readPluginData(projectDir, manifest.id);
 
   const originalLoad = Module._load;
   Module._load = function (request, parent, isMain) {
@@ -225,9 +223,10 @@ async function main() {
       // while every bundler emits CommonJS for Obsidian. Copying to a .cjs file
       // pins the interpretation to what Obsidian actually does.
       //
-      // The copy goes to a caller-provided writable directory, NOT next to the
-      // bundle: the plugin project commonly lives outside the DSH session
-      // workspace, where writing is denied (observed as EPERM on a real run).
+      // Prefer a caller-provided writable directory, then the OS temp dir, and
+      // only as a last resort beside the bundle: the plugin project commonly
+      // lives outside the DSH session workspace, where writing is denied
+      // (observed as EPERM on a real run).
       const copyDirs = [args.tempDir, tmpdir(), dirname(bundlePath)].filter(Boolean);
       let lastError;
       for (const dir of copyDirs) {
@@ -294,14 +293,20 @@ async function main() {
     }
 
     result.registrations = [...(instance._registrations ?? [])];
-    const meaningful = result.registrations.filter((r) => !r.startsWith("registerEvent") && r !== "addStatusBarItem");
-    if (meaningful.length === 0) {
+    // Only these three surfaces are asserted by name. The previous filter was
+    // "everything except registerEvent/addStatusBarItem", so a plugin that
+    // registered only a DOM event satisfied a check claiming a command or view.
+    const surfaceKeys = ["addCommand", "registerView", "addSettingTab"];
+    const surfaces = result.registrations.filter((r) => surfaceKeys.some((k) => r === k || r.startsWith(`${k}:`)));
+    if (surfaces.length === 0) {
       warn(
         "registers a command, view or setting tab",
-        "nothing of that kind was registered — is this plugin intentionally empty, or did registration fail silently?",
+        `none of ${surfaceKeys.join(" / ")} was registered (saw: ${result.registrations.join(", ") || "nothing"}) — ` +
+          "is this plugin intentionally empty, or did registration fail silently? A plugin that only adds a " +
+          "DOM event, interval or editor extension is legitimate and will land here.",
       );
     } else {
-      check("registers a command, view or setting tab", "warn", true);
+      check("registers a command, view or setting tab", "warn", true, `registered ${surfaces.join(", ")}`);
     }
 
     // Registration is not execution. An editor extension only does its work
@@ -349,7 +354,7 @@ async function main() {
       }
     } else if (result.registrations.some((r) => r === "registerEditorExtension")) {
       warn(
-        "editor extension body executed",
+        "editor extension body runs",
         "the plugin registers an editor extension, but nothing in it ran — its UI code is NOT covered by this smoke test",
       );
     }
@@ -548,13 +553,19 @@ function environmentGapDetail(error) {
   return undefined;
 }
 
-/** Best-effort DOM host from the project's own jsdom (never our dependency). */
+/**
+ * Best-effort DOM host. jsdom is deliberately NOT a dependency of this package:
+ * the project's own install is tried first, and a jsdom resolvable from this
+ * process is only a fallback (a hoisted or globally installed one).
+ */
 function installHostEnvironment(projectDir) {
   let JSDOM;
+  let fromProject = true;
   try {
     const projectRequire = createRequire(join(projectDir, "package.json"));
     ({ JSDOM } = projectRequire("jsdom"));
   } catch {
+    fromProject = false;
     try {
       ({ JSDOM } = require("jsdom"));
     } catch (error) {
@@ -631,7 +642,12 @@ function installHostEnvironment(projectDir) {
         }
       }
     }
-    return { dom: true, source: `project jsdom (${injected} globals + obsidian window extensions)` };
+    // Name the branch that actually succeeded: reporting "project jsdom" for a
+    // fallback-resolved one would misattribute where the DOM came from.
+    return {
+      dom: true,
+      source: `${fromProject ? "project jsdom" : "jsdom from this process"} (${injected} globals + obsidian window extensions)`,
+    };
   } catch (error) {
     return { dom: false, why: `jsdom setup failed: ${error && error.message}` };
   }
@@ -648,9 +664,7 @@ function readPluginData(projectDir, pluginId) {
   }
 }
 
-function seedPluginData() {
-  /* data.json is read directly; kept for symmetry with future seeding */
-}
+
 
 function pathToFileUrl(path) {
   return require("node:url").pathToFileURL(path).href;

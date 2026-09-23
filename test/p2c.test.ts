@@ -41,6 +41,36 @@ test("posixRel produces the project-relative form the config expects", () => {
   assert.equal(posixRel("/p", "/p"), ".");
 });
 
+test("a custom scaffold directory is collected by the runner", async () => {
+  const dir = await project();
+  try {
+    await e2eAction(fs, { action: "init", projectDir: dir, dir: "checks" });
+    assert.equal(await fs.exists(join(dir, "checks", "specs", "example.e2e.ts")), true, "the spec follows dir");
+    const conf = await readFile(join(dir, "wdio.conf.mts"), "utf8");
+    // A hardcoded "./e2e/specs/**" would write the spec where nothing collects it,
+    // making `dir` a parameter that silently does nothing.
+    assert.match(conf, /specs: \["\.\/checks\/specs\/\*\*\/\*\.e2e\.ts"\]/, "the glob must follow dir");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("the config installs from wherever the built artifacts actually live", async () => {
+  const dir = await project();
+  try {
+    // A real layout from the survey: the project builds into its own test vault.
+    const artifact = join(dir, "TestVault", ".obsidian", "plugins", "demo-notes");
+    await mkdir(artifact, { recursive: true });
+    await writeFile(join(artifact, "main.js"), "module.exports = {};\n");
+    await writeFile(join(artifact, "manifest.json"), JSON.stringify({ id: "demo-notes" }));
+    await e2eAction(fs, { action: "init", projectDir: dir }, {}, artifact);
+    const conf = await readFile(join(dir, "wdio.conf.mts"), "utf8");
+    assert.match(conf, /plugins: \["TestVault\/\.obsidian\/plugins\/demo-notes"\]/, "the installer must be pointed at the artifacts");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("findVault reuses a test vault the project already has", async () => {
   const dir = await project();
   try {
@@ -178,7 +208,11 @@ test("init writes the scaffold, wires scripts and keeps the project's own entrie
     assert.match(conf, /"wdio:obsidianOptions"/, "Obsidian options belong to the capability");
     assert.match(conf, /services: \["obsidian"\]/, "the service entry is the bare name");
     assert.doesNotMatch(conf, /services: \[\s*\[/, "the service must not take an options array");
-    assert.match(conf, /plugins: \["\."\]/, "the sandbox installs the project itself");
+    // Rendered, not hardcoded: the installer needs main.js directly under this
+    // path. This project passes its artifact directory explicitly (the test-vault
+    // layout), so the config must name that directory, not a fixed ".".
+    assert.match(conf, /plugins: \["TestVault\/\.obsidian\/plugins\/demo-notes"\]/, "the config installs from the real artifact directory");
+    assert.doesNotMatch(conf, /\{\{/, "no placeholder may survive");
     assert.match(conf, /copy: true/, "the vault is opened as a copy");
     // The window suppression was found the hard way, and the wrong answer is
     // the intuitive one: no chrome/electron flag hides the window, so pin BOTH

@@ -10,12 +10,12 @@
 
 两个互补、职责单一的部分：
 
-1. **知识（skill）**——Obsidian 插件开发规范（命名/提交规则、无障碍、代码质量、提交与 Scorecard）。源自 [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill)，内置为 [assets/skills/obsidian-plugin](assets/skills/obsidian-plugin/SKILL.md)，并在 `apply()` 里通过 `ctx.skills.register` 注册为 runtime skill（不依赖 project root）。
+1. **知识（skill）**——Obsidian 插件开发规范（命名/提交规则、无障碍、代码质量、提交与 Scorecard）。源自 [gapmiss/obsidian-plugin-skill](https://github.com/gapmiss/obsidian-plugin-skill)，内置为 [assets/skills/obsidian-plugin](assets/skills/obsidian-plugin/SKILL.md)，并在 `apply()` 里通过 `ctx.get("skills")?.register({...})` 注册为 runtime skill（用 `ctx.get`，不要属性访问；不依赖 project root）。
 2. **护栏（tool bundle）**——本仓库 `@leelee592/dsh-obsidian-plugin`，用 typed schema 暴露 11 个工具，把确定性操作封装起来：
    - `obsidian_plugin_scaffold` —— 复用 obsidian-sample-plugin 模板生成骨架
    - `obsidian_plugin_build` —— 打包成可加载的 main.js（入口与产物从项目自身配置解析）+ 静态自检
    - `obsidian_plugin_deploy` —— 把构建产物装进 vault 并启用插件 id
-   - `obsidian_plugin_inspect` —— 只读观测运行中的 App（status / errors / console / dom / css / screenshot / trustCheck）
+   - `obsidian_plugin_inspect` —— 观测运行中的 App（status / errors / console / dom / css / screenshot / trustCheck）；不写你的库与插件，但 console 会附加调试器、clear 清空缓冲、screenshot 写出图片文件
    - `obsidian_plugin_vault` —— 管理真机验证用的库（status / ensure / close / prune）
    - `obsidian_plugin_reload` —— 让改动在运行中的 App 生效，并校验插件确实加载
    - `obsidian_plugin_test` —— 离线冒烟：在纯 Node 里用桩化的 Obsidian API 加载构建产物
@@ -43,12 +43,12 @@
 | --- | --- | --- |
 | L1 静态 | 产物存在性、模块格式/导出/外部化检查、manifest↔产物一致性（在 `build` 内） | 无 |
 | L2 离线冒烟 | 在纯 Node 里用桩化的 Obsidian API 加载产物，真跑一遍生命周期（`test`），报告会点名本次没有覆盖什么 | 无 |
-| L3 用户的 Obsidian | 经 CLI 操作用户运行中的 App：`vault` / `reload` / `inspect` / `eval` | 会切换用户的窗口、抢焦点——只用于验证用户的真实环境 |
-| L4 沙箱 Obsidian | 独立配置目录 + 库副本的**独立 Obsidian** 跑项目自建的 WebdriverIO 套件（`e2e`）；生成的配置用 `before` 钩子在 spec 运行前隐藏实例窗口 | 无——开发循环的默认档 |
+| L3 用户的 Obsidian | 经 CLI 操作用户运行中的 App：`vault` / `reload` / `inspect` / `eval` | 窗口作用域：作用于当前前台的库，否则失败；唯一会切换窗口、抢焦点的只有 `vault action=ensure confirm=true` |
+| L4 沙箱 Obsidian | 独立配置目录 + 库副本的**独立 Obsidian** 跑项目自建的 WebdriverIO 套件（`e2e`）；生成的配置用 `before` 钩子在 spec 运行前隐藏实例窗口 | 对用户的 Obsidian 无干扰；沙箱自身窗口在启动瞬间会显示约 1 秒，任何启动开关都拦不住 |
 
 档位表使用短名：`vault` / `reload` / `inspect` / `eval` 即同名的 `obsidian_plugin_*` 工具。
 
-两条规则贯穿所有档位：**只允许修改会话工作区内创建的测试库**（用户自己的库是只读的，包括 CLI 侧的间接写入——`plugin:enable` / `unrestrict` 改写的是当前活动窗口那个库，工具会拒绝对非测试库执行）；**默认路径绝不切换用户的窗口、绝不抢焦点**。
+两条规则贯穿所有档位：**写入不越出会话工作区**——文件写入由沙箱拒绝，沙箱看不见的 App 侧写入（`plugin:enable` / `plugin:disable` / `unrestrict`，改写当前活动窗口那个库）在目标路径位于工作区外时由 `obsidian_plugin_reload` 拒绝；**默认路径绝不切换用户的窗口、绝不抢焦点**（唯一会切窗的是 `obsidian_plugin_vault action=ensure confirm=true`）。
 
 **检查通过不等于验收。** `build` 成功、离线冒烟的 PASS 只证明产物能在桩环境里加载——既不证明插件可用，也不证明 UI 已验证：桩环境没有编辑器。只要改动涉及界面、渲染或交互，就必须真正看到它——沙箱档（`e2e`）或对着运行中的 App（`inspect action=screenshot`）——并在回复里说明看到了什么。这条规则来自真实任务：一次纯粹改 UI 的改动，build + test 全绿就被当成完成，且从未部署，用户什么也没看到。
 
@@ -103,6 +103,7 @@ pnpm install            # 安装依赖（typescript + @types/node + peer 类型�
 pnpm run link-dsh-deps  # 链接 $DSH_HOME/profiles/node_modules/@deepseek-ai 类型
 pnpm run typecheck      # tsc --noEmit 类型检查
 pnpm run build          # tsc -> lib/
+pnpm test               # build + node --test test/（即上面六个套件）
 pnpm run deploy         # build + 注册进 profile + dump-config 验证
 ```
 
@@ -116,7 +117,7 @@ pnpm run deploy         # build + 注册进 profile + dump-config 验证
 - **沙箱策略**：每次写操作都要把会话 `sandboxPolicy` 传给 `ctx.fs.writeText(target, content, intent, signal, policy)`；policy 用 `ctx.get("sandboxPolicy")?.resolve({ session })` 获取（`ctx.get` 不触发 inject 检查，不要用属性访问 `ctx.sandboxPolicy`）。
 - **模板外置**：不在工具代码里内嵌大量模板字符串；模板作为包内 assets（`assets/templates/`）随包分发，运行时用 `new URL('../assets/templates/<file>', import.meta.url)` 读取 + 占位符替换。
 - **进程执行**：需要跑外部命令（如 eslint）时，`spawnSync` 借用被检项目自身的 `node_modules/.bin`，不存在时降级为 warning 而非报错。
-- **命名/提交规则护栏**：id 不含 `obsidian`、不以 `plugin` 结尾；name 不含 `Obsidian`、不以 `Plugin` 结尾；description 句末标点、≤250 字符——同时固化在 scaffold/validate 代码护栏与 skill 文档中。
+- **命名/提交规则护栏**：id 不含 `obsidian`、不以 `plugin` 结尾；name 不含 `Obsidian`、不以 `Plugin` 结尾；description 句末标点；≤250 字符只是 validate 阶段的告警（scaffold 不查长度），skill 文档同样表述为「建议」。
 - **文件读写 seam**：`inject: ["tools", "fs"]`，读写走 `ctx.fs`（受沙箱约束），`ctx.fs` 缺省时回退 `node:fs`（bare-Node 测试场景）。
 - **skill 分发**：skill 作为插件资产放在 `assets/skills/` 随包分发，并在 `apply()` 里用 `ctx.get("skills")?.register({...})` 注册 runtime skill（body 从包内 `new URL('../assets/skills/<name>/SKILL.md', import.meta.url)` 读取）。
 - **路径有两种身份，不可混用**：后端返回的 `FsTarget` 是用于读取与受沙箱约束写入的不透明句柄；而「操作系统绝对路径」才是子进程（esbuild、外部 CLI）能打开的路径。把句柄传给 spawn、或把 OS 路径交给沙箱写入，都会静默破坏沙箱围栏，因此 seam 必须同时显式暴露两者。
@@ -134,7 +135,7 @@ pnpm run deploy         # build + 注册进 profile + dump-config 验证
 - **一次只暴露一层安全开关**：作用于某个作用域的安全设置（这里是逐库受限模式）绝不能成为其它操作顺带的副作用。给它独立动作，并写明后果与影响范围。
 - **依赖前台状态的步骤要一次做完**：如果某操作依赖外部焦点，就把需要它的步骤连续执行。用户在两次工具调用之间切一下应用，就可能让前一次的铺垫失效。
 - **不要写死项目的目录布局**：入口与产物目录是约定，不是事实。真实插件的入口有 `src/main.ts`、仓库根 `main.ts`、`src/plugin/main.ts` 等形态，产物可能落在项目根、测试库内或 `dir: '.'`。两者都要从项目自身的配置解析（显式参数 → 约定 → 配置 → `package.json`），失败时列出全部尝试过的位置，让调用方能行动而不是靠猜。
-- **只要存在配置就优先用项目自己的构建脚本**：打包配置可能带着我们无法从命令行补齐的插件（esbuild-svelte、esbuild-sass-plugin）。只有在没有配置可遵循、或调用方显式选择时才用我们自己的参数——并且此时必须警告「项目插件未被应用」。
+- **项目声明了构建脚本就优先用它**：打包配置可能带着我们无法从命令行补齐的插件（esbuild-svelte、esbuild-sass-plugin），而脚本是唯一能应用它们的入口——是否声明脚本才是判据，不是是否存在配置。只有在项目既没有脚本、也没有配置可遵循，或调用方显式选择时才用我们自己的参数——并且此时必须警告「项目插件未被应用」。
 - **配置只扫描，绝不求值**：为了找 `outfile` / `outdir` 而读取打包配置时，不得执行项目代码，何况 `dev` 配置会进入 watch 模式。按文本解析。
 - **验证档位要标明，不要含混**：静态扫描、离线桩、沙箱实例与用户自己的 App 各自证明的东西不同。说明结论出自哪一档、可信度到哪里为止——桩环境不能证明运行期行为。
 - **要消除干扰，而不是把干扰压到最小**：当某项操作的代价是用户的注意力（切窗口、抢焦点），就用「独立实例 + 独立配置目录 + 数据副本」把它从根上消掉，而不是尽量少做。

@@ -115,12 +115,17 @@ function offlineNote(result: HarnessResult): string {
   const middle = result.dom
     ? "\n      and that the registered view plugins can be constructed against a stub view. Rendering, events and"
     : "\n      UI code registered as an editor extension was NOT exercised: no DOM host was available.";
+  // The stub's vault is always empty (its file map is never populated), so a
+  // plugin that iterates notes sees none offline. Saying so here stops a reader
+  // concluding "the plugin found no notes" from a smoke-test pass.
+  const vaultNote =
+    "\n      The stub vault is EMPTY: vault.getFiles() and the metadata cache return nothing, so note-dependent logic is not exercised here.";
   const next = result.viewPluginsRegistered
     ? "\nNext: this run registered view plugin(s). If your change touched the UI, a PASS here is NOT acceptance — " +
       "see it in a running app (obsidian_plugin_e2e, or obsidian_plugin_inspect action=screenshot), because the stub has no editor."
     : "\nNext: for anything that needs a real editor or the real vault, use obsidian_plugin_e2e (sandboxed, no window) " +
       "or obsidian_plugin_inspect against a running app.";
-  return `${head}${middle}${next}`;
+  return `${head}${middle}${vaultNote}${next}`;
 }
 
 export async function testPlugin(fs: Fs, args: TestArgs, call: FsCall = {}): Promise<string> {

@@ -83,6 +83,33 @@ test("end to end: a well-behaved bundle passes, and the report carries the limit
   }
 });
 
+test("end to end: a plugin reads its own data.json, as it would in the app", async () => {
+  // loadData() must return the persisted data.json, not undefined: a plugin whose
+  // onload branches on it (e.g. `if (!data) return`) would otherwise be exercised
+  // down a path the real app never takes. This was broken by an own-property
+  // assignment in the stub's Plugin constructor shadowing the seeded value.
+  const dir = await project(`
+    const { Plugin } = require("obsidian");
+    module.exports = class extends Plugin {
+      async onload() {
+        const data = await this.loadData();
+        if (!data) throw new Error("loadData() returned nothing");
+        if (data.theme !== "dark") throw new Error("loadData() returned " + JSON.stringify(data));
+      }
+    };
+  `);
+  try {
+    await writeFile(join(dir, "data.json"), JSON.stringify({ theme: "dark" }));
+    const out = await testPlugin(fs, { projectDir: dir });
+    // The plugin throws when it cannot read its own settings, so a PASS is the
+    // assertion — and a regression surfaces as a real message rather than silence.
+    assert.match(out, /Smoke test: PASS/);
+    assert.doesNotMatch(out, /loadData\(\) returned/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("end to end: an onload() that throws fails with the real message", async () => {
   const dir = await project(`
     const { Plugin } = require("obsidian");

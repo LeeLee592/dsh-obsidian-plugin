@@ -37,6 +37,8 @@ interface E2eVars {
   pluginDir: string;
   /** Vault the sandbox opens (copied before use), relative to the project. */
   vaultDir: string;
+  /** Glob the runner collects specs from, following the scaffold directory. */
+  specsGlob: string;
 }
 
 /** Render the `{{...}}` placeholders used by the shipped templates. */
@@ -45,7 +47,8 @@ export function renderTemplate(template: string, vars: E2eVars): string {
     .split("{{PLUGIN_ID}}").join(vars.pluginId)
     .split("{{PLUGIN_NAME}}").join(vars.pluginName)
     .split("{{PLUGIN_DIR}}").join(vars.pluginDir)
-    .split("{{VAULT_DIR}}").join(vars.vaultDir);
+    .split("{{VAULT_DIR}}").join(vars.vaultDir)
+    .split("{{SPECS_GLOB}}").join(vars.specsGlob);
 }
 
 /**
@@ -151,7 +154,7 @@ const REQUIRED_CONFIG_FACTS: Array<{ test: RegExp; label: string; why: string }>
 ];
 
 /** Report which required facts a project's existing config is missing. */
-export function configDrift(configText: string): string[] {
+function configDrift(configText: string): string[] {
   return REQUIRED_CONFIG_FACTS.filter((fact) => !fact.test.test(configText)).map((fact) => `${fact.label} — ${fact.why}`);
 }
 
@@ -218,6 +221,7 @@ async function init(fs: Fs, args: E2eArgs, call: FsCall, artifactDir?: string): 
     pluginName: manifest.name ?? manifest.id,
     pluginDir: pluginDirFor(projectDir, artifactDir ?? join(projectDir, "main.js")),
     vaultDir: posixRel(projectDir, vault.dir),
+    specsGlob: `${posixRel(projectDir, specsDir)}/specs/**/*.e2e.ts`,
   };
 
   // `wdio run` resolves its config from the project root, so the config lives

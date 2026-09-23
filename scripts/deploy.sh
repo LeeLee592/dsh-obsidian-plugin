@@ -28,4 +28,4 @@ else
 fi
 
 echo
-echo "next: dsh --profile $PROFILE   # 重启后模型工具集多出 3 个 obsidian_plugin_* 工具"
+echo "next: dsh --profile $PROFILE   # 重启后模型工具集多出 11 个 obsidian_plugin_* 工具"
