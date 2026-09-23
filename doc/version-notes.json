@@ -221,6 +221,7 @@
     "zh": {
       "title": "验证四档：离线冒烟与沙箱化 E2E",
       "items": [
+        "⚠️ 更正：「工具会拒绝对非测试库执行」这句在当时并不成立——代码里没有库身份检查，该门禁到 0.8.6 才真正实现。",
         "新增 obsidian_plugin_test（离线冒烟，L2 档）：在纯 Node 里用桩化的 Obsidian API 加载构建产物，真跑一遍生命周期——默认导出是 Plugin 子类、onload() 执行、注册动作发生、onunload() 清理、无未处理的 rejection，不需要安装 Obsidian。它会真实解析项目自身的 @codemirror/* 与 @lezer/*，DOM 相关插件可用项目自带的 jsdom；它不验证运行期行为：报告固定标注这是桩环境，并指向 inspect/e2e 做真实验证。",
         "新增 obsidian_plugin_e2e（沙箱化端到端测试，L4 档）：init 用 WebdriverIO + wdio-obsidian-service 生成 wdio.conf.mts、tsconfig.e2e.json 与起始 spec（脚手架目录由 dir 指定，默认 e2e/），并加入 e2e / e2e:watch 脚本；它启动的独立 Obsidian 使用独立配置目录与库副本，因此不切用户窗口、不抢焦点。status 只报告现状与确切的安装命令，不写任何文件；runner 依赖留在用户项目里。",
         "验证明确为四档，并写明了默认档：L1 静态（build 内置）、L2 离线冒烟（test，无需 Obsidian）、L3 用户自己的 Obsidian（vault / reload / inspect / eval，会切换窗口、抢焦点）、L4 沙箱 Obsidian（e2e）。日常开发循环默认走 L1 + L2 + L4；L4 档的存在意义就是让默认循环不再打扰用户——抢焦点原本来自我们自己调用 vault-open，沙箱实例用「独立实例 + 库副本」把它从根上消除，用户窗口全程不动。L3 只在需要验证用户真实环境时使用。",
@@ -232,6 +233,7 @@
     "en": {
       "title": "Four verification tiers: offline smoke and sandboxed e2e",
       "items": [
+        "⚠️ Correction: the claim that the tools refuse to run against a non-test vault was not true at the time — no vault-identity check existed; the gate only landed in 0.8.6.",
         "New obsidian_plugin_test (offline smoke, tier L2): loads the built bundle in plain Node against a stubbed Obsidian API and exercises the real lifecycle — default export is a Plugin subclass, onload() runs, registrations happen, onunload() cleans up, no unhandled rejections — with no Obsidian installed. It resolves the project's own @codemirror/* and @lezer/* for real and can use the project's own jsdom for DOM-dependent plugins; it does not verify runtime behaviour, so the report always says it is a stub environment and points at inspect/e2e for real verification.",
         "New obsidian_plugin_e2e (sandboxed end-to-end tests, tier L4): init generates wdio.conf.mts, tsconfig.e2e.json and a starting spec with WebdriverIO + wdio-obsidian-service (scaffold directory via dir, default e2e/), and adds the e2e / e2e:watch scripts; the Obsidian it launches uses an isolated config directory and a copy of the vault, so nothing switches the user's window or steals focus. status reports only what exists and the exact install command, writing nothing; the runner dependencies stay in the user's project.",
         "Verification is now explicitly four tiers, with the default stated: L1 static (inside build), L2 offline smoke (test, no Obsidian needed), L3 the user's own Obsidian (vault / reload / inspect / eval — it switches the window and steals focus), L4 sandboxed Obsidian (e2e). The default development loop is L1 + L2 + L4, and the e2e tier exists so that the default loop never switches the user's window — the focus stealing came from our own vault-open calls, and a sandboxed instance with its own config directory and a copy of the vault removes it outright. L3 is used only when the user's real environment is the question.",
