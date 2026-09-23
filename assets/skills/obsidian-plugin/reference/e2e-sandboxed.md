@@ -31,11 +31,29 @@ downloaded builds out of git.
 
 | | CLI against your Obsidian | Sandboxed e2e |
 |---|---|---|
-| Your window / focus | switched and stolen | **untouched** |
+| Your window / focus | switched and stolen | **untouched** (never frontmost) |
 | Repeatability | your vault state drifts | fresh instance per run |
 | Obsidian versions | only the one you have | any version, including `earliest` = the `minAppVersion` your manifest promises |
 | Parallel runs | no | yes |
 | Placement | none | none |
+
+## The sandbox instance never shows a window
+
+The generated `wdio.conf.mts` hides it in a `before` hook, before any spec runs.
+Do not try to do this with a launch flag: `--headless`, `--headless=new` and
+`--hidden` were each measured and all leave `isVisible() === true`, because
+Obsidian is an Electron app that creates and shows its own window during
+bootstrap. `wdio-obsidian-service` exposes no visibility option either (its
+`ObsidianCapabilityOptions` has none) and the launcher does not control the
+window, so hiding from inside the app is the earliest point it can be done.
+Consequences worth knowing:
+
+- The window still exists on screen for roughly a second at startup. That is the
+  floor, not a misconfiguration.
+- Use `pnpm run e2e:watch` to keep one instance alive across runs, so that
+  startup window is paid once instead of on every run.
+- `browser.executeObsidian` is not registered yet inside `before`; use the raw
+  `browser.execute`.
 
 ## Why the sandbox is worth the setup cost
 

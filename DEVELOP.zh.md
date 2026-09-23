@@ -44,7 +44,7 @@
 | L1 静态 | 产物存在性、模块格式/导出/外部化检查、manifest↔产物一致性（在 `build` 内） | 无 |
 | L2 离线冒烟 | 在纯 Node 里用桩化的 Obsidian API 加载产物，真跑一遍生命周期（`test`），报告会点名本次没有覆盖什么 | 无 |
 | L3 用户的 Obsidian | 经 CLI 操作用户运行中的 App：`vault` / `reload` / `inspect` / `eval` | 会切换用户的窗口、抢焦点——只用于验证用户的真实环境 |
-| L4 沙箱 Obsidian | 独立配置目录 + 库副本的**独立 Obsidian** 跑项目自建的 WebdriverIO 套件（`e2e`） | 无——开发循环的默认档 |
+| L4 沙箱 Obsidian | 独立配置目录 + 库副本的**独立 Obsidian** 跑项目自建的 WebdriverIO 套件（`e2e`）；生成的配置用 `before` 钩子在 spec 运行前隐藏实例窗口 | 无——开发循环的默认档 |
 
 档位表使用短名：`vault` / `reload` / `inspect` / `eval` 即同名的 `obsidian_plugin_*` 工具。
 

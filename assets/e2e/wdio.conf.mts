@@ -22,6 +22,7 @@
 // service entry itself is just the string "obsidian".
 
 import path from "node:path";
+import { browser } from "@wdio/globals";
 import type { Options } from "@wdio/types";
 
 const E2E_VAULT = "./e2e/vault"; // a copy is made; your notes are never touched
@@ -40,14 +41,11 @@ export const config: Options.Testrunner = {
 			// exactly the compatibility claim the manifest makes. A pinned
 			// version string works too.
 			browserVersion: process.env.E2E_APP_VERSION ?? "latest",
-			// Two flags, both learned the hard way:
-			//  · --no-sandbox: Chromium's renderer sandbox cannot start inside
-			//    another sandbox (an agent shell, a CI container); its helper
-			//    processes abort at startup.
-			//  · --headless=new: the test instance must never put a window on
-			//    screen. Without it Obsidian flashes into view during every run,
-			//    which is interference even though it is not the user's app.
-			"goog:chromeOptions": { args: ["--no-sandbox", "--headless=new"] },
+			// --no-sandbox: Chromium's renderer sandbox cannot start inside
+			// another sandbox (an agent shell, a CI container); its helper
+			// processes abort at startup. Note that no *visibility* flag works
+			// here — see the `before` hook below for why, and what does.
+			"goog:chromeOptions": { args: ["--no-sandbox"] },
 			"wdio:obsidianOptions": {
 				// "latest" | "earliest" | a specific installer version.
 				installerVersion: process.env.E2E_INSTALLER_VERSION ?? "latest",
@@ -66,5 +64,24 @@ export const config: Options.Testrunner = {
 	// switching this value over is all it takes.
 	reporters: ["spec"],
 	logLevel: "warn",
+	// Take the instance's window off screen before any spec runs.
+	//
+	// Why not a flag: Obsidian is an Electron app that creates and shows its own
+	// window during bootstrap, so the usual headless/hidden switches do NOT
+	// suppress it — each was measured, and each left isVisible() === true. The
+	// window therefore appears for about a second at startup regardless. Hiding
+	// it from inside the app is the earliest point it can be removed; use
+	// `pnpm run e2e:watch` to keep one instance alive between runs so that cost
+	// is paid once instead of per run.
+	//
+	// `browser.executeObsidian` is NOT available yet at this point (the service
+	// registers its browser commands slightly later), so this uses the raw
+	// `execute`, which runs in the renderer where `window.require` is reachable.
+	before: async function () {
+		await browser.execute(() => {
+			const remote = (window as unknown as { require: (m: string) => any }).require("electron").remote;
+			for (const w of remote.BrowserWindow.getAllWindows()) w.hide();
+		});
+	},
 	mochaOpts: { ui: "bdd", timeout: 60_000 },
 };

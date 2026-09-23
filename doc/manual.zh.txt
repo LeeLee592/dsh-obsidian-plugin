@@ -25,7 +25,7 @@
 - L1 静态：obsidian_plugin_build 内的产物 / 模块格式 / manifest 检查，无干扰。
 - L2 离线冒烟：obsidian_plugin_test 在纯 Node 里用桩化的 Obsidian API 加载产物，不需要 Obsidian，无干扰。
 - L3 用户的 Obsidian：obsidian_plugin_vault / obsidian_plugin_reload / obsidian_plugin_inspect / obsidian_plugin_eval 经 CLI 作用于你自己的运行中 App，会切换你的窗口、抢焦点——只用于验证你的真实环境。
-- L4 沙箱 Obsidian：obsidian_plugin_e2e 接好的 WebdriverIO 套件运行一个独立 Obsidian（独立配置目录 + 库副本），零干扰。
+- L4 沙箱 Obsidian：obsidian_plugin_e2e 接好的 WebdriverIO 套件运行一个独立 Obsidian（独立配置目录 + 库副本，实例窗口在任何 spec 运行前被隐藏），零干扰。
 
 验收规则（硬性）：obsidian_plugin_build 通过不等于插件可用，obsidian_plugin_test 的 PASS 也不等于 UI 已验证。只要改动涉及界面、渲染或交互，就必须真正看到它——沙箱档 obsidian_plugin_e2e，或对着运行中的 App 用 obsidian_plugin_inspect action=screenshot——并在回复里说明看到了什么。
 

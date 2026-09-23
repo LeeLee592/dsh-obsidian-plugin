@@ -36,7 +36,7 @@
 | **L1** 静态 | `obsidian_plugin_build` 内的产物 / 模块格式 / manifest 检查 | 无 |
 | **L2** 离线冒烟 | `obsidian_plugin_test` 在纯 Node 里用桩化的 Obsidian API 加载产物；无需 Obsidian | 无 |
 | **L3** 用户的 Obsidian | `obsidian_plugin_vault` / `obsidian_plugin_reload` / `obsidian_plugin_inspect` / `obsidian_plugin_eval` 经 CLI 作用于**你自己的**运行中 App，仅用于验证你的真实环境 | 会切换你的窗口、抢焦点 |
-| **L4** 沙箱 Obsidian | `obsidian_plugin_e2e` + 项目自建的 WebdriverIO 套件运行一个独立 Obsidian（独立配置、库副本） | 无——开发循环的默认档 |
+| **L4** 沙箱 Obsidian | `obsidian_plugin_e2e` + 项目自建的 WebdriverIO 套件运行一个独立 Obsidian（独立配置、库副本，实例窗口在任何 spec 运行前即被隐藏） | 无——开发循环的默认档 |
 
 **检查通过不等于验收。** `obsidian_plugin_build` 通过不代表插件可用，`obsidian_plugin_test` 的 PASS 也不代表 UI 已验证。只要改动涉及界面、渲染或交互，就必须在沙箱档（`obsidian_plugin_e2e`）或对着运行中的 App（`obsidian_plugin_inspect action=screenshot`）**真正看到它**，并在回复里说明看到了什么。
 

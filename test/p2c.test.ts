@@ -70,9 +70,19 @@ test("init writes the scaffold, wires scripts and keeps the project's own entrie
     assert.doesNotMatch(conf, /services: \[\s*\[/, "the service must not take an options array");
     assert.match(conf, /plugins: \["\."\]/, "the sandbox installs the project itself");
     assert.match(conf, /copy: true/, "the vault is opened as a copy");
-    // Both flags were found the hard way; a regression would be invisible.
+    // The window suppression was found the hard way, and the wrong answer is
+    // the intuitive one: no chrome/electron flag hides the window, so pin BOTH
+    // that no flag is claimed to do it and that the hook which does is present.
     assert.match(conf, /--no-sandbox/, "nested sandboxes make Chromium helpers abort");
-    assert.match(conf, /--headless=new/, "the test instance must not show a window");
+    // Check the real args, not the prose: the comment names the ineffective
+    // switches on purpose, so scanning the whole file would fail on the
+    // explanation. A visibility flag in the actual args is the regression.
+    const args = /"goog:chromeOptions": \{ args: \[([^\]]*)\]/.exec(conf)?.[1] ?? "";
+    assert.equal(args.replace(/[\s"']/g, ""), "--no-sandbox", "only --no-sandbox belongs in the args; no flag hides the window");
+    assert.match(conf, /before: async function/, "window hiding needs a hook");
+    assert.match(conf, /getAllWindows\(\)\) w\.hide\(\)/, "the hook must actually hide the window");
+    assert.match(conf, /executeObsidian.*NOT available|NOT available yet at this point/i, "and record why the raw execute is required");
+    assert.match(conf, /e2e:watch/, "the per-run startup window is mitigated, and the mitigation is named");
     assert.doesNotMatch(conf, /reporters: \["obsidian"\]/, "that reporter needs an unlisted package");
     assert.doesNotMatch(conf, /\{\{/, "no placeholder may survive");
 
@@ -123,7 +133,7 @@ test("the generated config documents why the tier exists", async () => {
     await e2eAction(fs, { action: "init", projectDir: dir });
     const conf = await readFile(join(dir, "wdio.conf.mts"), "utf8");
     assert.match(conf, /switch windows and steal/i);
-    assert.match(conf, /must never put a window on\s*\/\/ screen|must never put a window on/i, "headless is explained, not just set");
+    assert.match(conf, /creates and shows its own\s*\/\/ window|creates and shows its own/i, "why no flag works is explained, not just asserted");
     assert.match(conf, /isolated user-configuration directory/);
     assert.match(conf, /copy: true/, "the sandbox must work on a copy of the vault");
     assert.match(conf, /earliest/, "minAppVersion is the default version under test");
@@ -136,7 +146,7 @@ test("the generated config documents why the tier exists", async () => {
 test("status and init report a config that predates a required setting", async () => {
   const dir = await project();
   try {
-    // A config written before --headless=new existed: plausible, present, and it
+    // A config written before window hiding existed: plausible, present, and it
     // flashes a window on every run. Nothing else in the tool would notice.
     await writeFile(
       join(dir, "wdio.conf.mts"),
@@ -151,8 +161,8 @@ test("status and init report a config that predates a required setting", async (
 
     const out = await e2eAction(fs, { action: "status", projectDir: dir });
     assert.match(out, /config:\s+OUT OF DATE/);
-    assert.match(out, /--headless=new/, "the missing setting is named");
-    assert.match(out, /every run flashes an Obsidian window/, "and why it matters");
+    assert.match(out, /before` hook that hides the instance window/, "the missing setting is named");
+    assert.match(out, /it stays on screen for the whole run/, "and why it matters");
     assert.match(out, /action=init force=true/, "with the way to fix it");
 
     const kept = await e2eAction(fs, { action: "init", projectDir: dir });

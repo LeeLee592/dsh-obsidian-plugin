@@ -44,7 +44,7 @@ Four tiers, cheapest first; the tier in parentheses is what runs it:
 | L1 static | artifact existence, module format / export / external checks, manifest↔artifact consistency (in `build`) | none |
 | L2 offline smoke | the bundle is loaded in plain Node against a stubbed Obsidian API and the real lifecycle is exercised (`test`), and the report names what it did not cover | none |
 | L3 the user's Obsidian | the CLI drives the user's running app: `vault` / `reload` / `inspect` / `eval` | switches the user's window and steals focus — only for verifying the user's real environment |
-| L4 sandboxed Obsidian | a separate Obsidian with its own config directory and a copy of the vault runs the project's own WebdriverIO specs (`e2e`) | none — the default for the development loop |
+| L4 sandboxed Obsidian | a separate Obsidian with its own config directory and a copy of the vault runs the project's own WebdriverIO specs (`e2e`); the generated config hides the instance's window in a `before` hook before any spec runs | none — the default for the development loop |
 
 Tier rows use short names: `vault` / `reload` / `inspect` / `eval` are the `obsidian_plugin_*` tools of the same name.
 

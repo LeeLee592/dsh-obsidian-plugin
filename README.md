@@ -36,7 +36,7 @@ Verification has four tiers; the default development loop is L1 + L2 + L4.
 | **L1** static | artifact / module-format / manifest checks inside `obsidian_plugin_build` | none |
 | **L2** offline smoke | `obsidian_plugin_test` loads the built bundle in plain Node against a stubbed Obsidian API; no Obsidian needed | none |
 | **L3** your Obsidian | `obsidian_plugin_vault` / `obsidian_plugin_reload` / `obsidian_plugin_inspect` / `obsidian_plugin_eval` act on **your** running app, CLI-driven; only for verifying your real environment | switches your window and steals focus |
-| **L4** sandboxed Obsidian | `obsidian_plugin_e2e` + the project's own WebdriverIO specs run a separate Obsidian (isolated config, vault copy) | none — the default for the development loop |
+| **L4** sandboxed Obsidian | `obsidian_plugin_e2e` + the project's own WebdriverIO specs run a separate Obsidian (isolated config, vault copy; the generated config hides that instance's window before any spec runs) | none — the default for the development loop |
 
 **A passing check is not acceptance.** `obsidian_plugin_build` succeeding does not mean the plugin works, and a PASS from `obsidian_plugin_test` does not mean the UI was verified. If a change touches interface, rendering or interaction, it must actually be seen in the sandboxed e2e tier (`obsidian_plugin_e2e`) or against the running app (`obsidian_plugin_inspect action=screenshot`), and the reply should say what was seen.
 

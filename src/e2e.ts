@@ -82,7 +82,14 @@ const REQUIRED_CONFIG_FACTS: Array<{ test: RegExp; label: string; why: string }>
   },
   { test: /services:\s*\["obsidian"\]/, label: 'services: ["obsidian"]', why: "the service entry takes no options object" },
   { test: /--no-sandbox/, label: "--no-sandbox on the capability", why: "Chromium's helpers abort at startup inside a nested sandbox" },
-  { test: /--headless=new/, label: "--headless=new on the capability", why: "without it every run flashes an Obsidian window on screen" },
+  {
+    // NOT a chrome flag: none of --headless, --headless=new or --hidden hides
+    // the window (all verified), because Obsidian shows its own window during
+    // bootstrap. Hiding it from inside the app is what works.
+    test: /hide\(\)/,
+    label: "a `before` hook that hides the instance window",
+    why: "no chrome/electron flag suppresses the window; without this hook it stays on screen for the whole run",
+  },
   { test: /copy:\s*true/, label: "copy: true", why: "the vault must be opened as a copy, never in place" },
   { test: /plugins:/, label: "plugins: [...]", why: "the sandbox needs to install the plugin under test" },
 ];
@@ -256,8 +263,11 @@ async function init(fs: Fs, args: E2eArgs, call: FsCall, artifactDir?: string): 
   lines.push(
     "",
     "Why this is the default verification tier: the sandbox is a separate Obsidian",
-    "with its own config directory, a copy of the vault and a headless window, so",
-    "nothing switches, focuses or even briefly shows your Obsidian while it runs.",
+    "with its own config directory and a copy of the vault, and the generated",
+    "config hides that instance's window before any spec runs — so nothing",
+    "switches, focuses or shows your own Obsidian while it runs. (Its own window",
+    "still exists for about a second during startup: no launch flag suppresses it,",
+    "because Obsidian shows the window itself. `e2e:watch` pays that cost once.)",
     "",
     "First run downloads its own Obsidian (tens of MB) into ./.obsidian-cache and",
     "reuses it afterwards. On a slow connection that download can exceed the",

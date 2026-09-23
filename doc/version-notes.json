@@ -1,5 +1,27 @@
 [
   {
+    "version": "0.8.3",
+    "date": "2026-09-23",
+    "zh": {
+      "title": "L4 沙箱实例彻底不显示窗口",
+      "items": [
+        "生成的 wdio.conf.mts 现在带一个 before 钩子，在任何 spec 运行前隐藏沙箱 Obsidian 的窗口，实测 isVisible() 由 true 变为 false。",
+        "纠正上一版的错误做法：--headless、--headless=new、--hidden 三个开关逐一实测均无效，窗口仍然可见——Obsidian 是 Electron 应用，自举时会自己创建并显示窗口，命令行开关拦不住。相关注释已改为如实说明，不再声称靠 flag 隐藏。",
+        "e2e 漂移检测改为要求该 before 钩子（原先要求的是无效的 --headless=new），并用生成配置的 args 做精确断言，避免把解释性注释误判为违规。",
+        "确认 wdio-obsidian-service 的 ObsidianCapabilityOptions 没有任何窗口可见性选项，launcher 也不控制窗口，因此该钩子是最早且唯一可行的隐藏点；启动瞬间约 1 秒的窗口无法用任何开关消除，可用 pnpm run e2e:watch 只付一次。"
+      ]
+    },
+    "en": {
+      "title": "The L4 sandboxed instance no longer shows a window at all",
+      "items": [
+        "The generated wdio.conf.mts now carries a `before` hook that hides the sandboxed Obsidian window before any spec runs; measured isVisible() going from true to false.",
+        "Corrects the previous release's wrong fix: --headless, --headless=new and --hidden were each measured and none of them hides the window. Obsidian is an Electron app that creates and shows its own window during bootstrap, so no launch switch can suppress it. The config comments now say this instead of claiming a flag does the job.",
+        "E2E config drift now requires that `before` hook (it previously required the ineffective --headless=new), and asserts against the generated args precisely so an explanatory comment is not mistaken for a violation.",
+        "Confirmed that wdio-obsidian-service's ObsidianCapabilityOptions has no window-visibility option and the launcher does not control the window, so the hook is the earliest and only workable hiding point. The roughly one-second window during startup cannot be removed by any switch; `pnpm run e2e:watch` pays that cost once."
+      ]
+    }
+  },
+  {
     "version": "0.8.2",
     "date": "2026-09-23",
     "zh": {
