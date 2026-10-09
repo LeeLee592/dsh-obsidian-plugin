@@ -10,7 +10,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { mkdtemp, readFile, writeFile, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 import { Fs } from "../lib/fs.js";
 import { buildPlugin, buildArgs } from "../lib/build.js";
 import { deployPlugin, resolveVault, BINDING_FILE } from "../lib/deploy.js";
@@ -286,6 +288,42 @@ test("the plugin registers every tool through the real defineTool validator", as
   assert.deepEqual(mod.inject, ["tools", "fs"]);
 });
 
+test("the skill registers in the shape the runtime validates", async () => {
+  // The runtime validates a runtime skill with `SKILL_NAME` and a non-empty
+  // description; a name that fails that pattern throws. Registration is wrapped
+  // in a try/catch so a skill problem cannot cost the tools, which makes it
+  // invisible unless it is asserted here.
+  const mod: any = await import("../lib/index.js");
+  const skills: any[] = [];
+  const ctx = {
+    tools: { register: () => () => {} },
+    get: (name: string) => (name === "skills" ? { register: (s: unknown) => skills.push(s) } : undefined),
+  };
+
+  mod.apply(ctx, {});
+
+  assert.equal(skills.length, 1, "exactly one skill is registered");
+  assert.match(skills[0].name, /^[a-z0-9]+(?:-[a-z0-9]+)*$/, "the name must satisfy the runtime pattern");
+  assert.ok(skills[0].description.length > 0, "a description is required");
+  assert.ok(skills[0].content.includes("Obsidian"), "the body is the shipped skill, not an empty string");
+  assert.equal(skills[0].source, "runtime");
+});
+
+test("a skill failure is reported instead of swallowed", async () => {
+  const mod: any = await import("../lib/index.js");
+  const warnings: string[] = [];
+  const ctx = {
+    tools: { register: () => () => {} },
+    logger: { warn: (m: string) => warnings.push(m) },
+    get: (name: string) => (name === "skills" ? { register: () => { throw new Error("boom"); } } : undefined),
+  };
+
+  mod.apply(ctx, {});
+
+  assert.equal(warnings.length, 1, "the plugin must not stay silent");
+  assert.match(warnings[0], /could not register the obsidian-plugin skill.*boom/);
+});
+
 test("a JSON Schema parameter root is rejected by the tool API", async () => {
   const { defineTool } = await import("@deepseek-ai/dsh-tools");
   const output = { schema: { type: "string" }, render: (_a: unknown, v: string) => [{ type: "text", text: v }] };
@@ -302,4 +340,50 @@ test("a JSON Schema parameter root is rejected by the tool API", async () => {
     () => defineTool({ ...base, parameters: { type: "object", properties: { a: { type: "string" } }, required: ["a"] } }),
     /unsupported JSON schema/i,
   );
+});
+
+// ---- the deploy-time composition check ------------------------------------
+//
+// These run the real script, because the bug they guard against was in the check
+// itself: `dsh --dump-config | grep obsidian-plugin` reported success for a
+// plugin the runtime was skipping, since the incompatibility message contains
+// the package name.
+
+const REPO = dirname(dirname(fileURLToPath(import.meta.url)));
+const VERIFY = join(REPO, "scripts", "verify-composed.mjs");
+const PKG = "@leelee592/dsh-obsidian-plugin";
+const ENTRY = "obsidian-plugin";
+
+/** Run the verifier over a dump, returning { code, out }. */
+function verify(dump: string): { code: number; out: string } {
+  const run = spawnSync(process.execPath, [VERIFY, ENTRY, PKG], { input: dump, encoding: "utf8" });
+  return { code: run.status ?? 1, out: `${run.stdout ?? ""}${run.stderr ?? ""}` };
+}
+
+const COMPOSED = ["# == @leelee592/dsh-obsidian-plugin", `- id: ${ENTRY}`, `  name: '${PKG}'`, ""].join("\n");
+const SKIPPED = [
+  `dsh: skipping profile bundle "${PKG}": Error: Plugin ${PKG}@0.9.0 is incompatible with dsh 0.2.0-rc.2: peerDependencies {"@deepseek-ai/dsh-tools":"^0.1.5-rc.2"}. Exact-version exemption: not active.`,
+  "",
+].join("\n");
+
+test("the composition check accepts a composed, loaded plugin", () => {
+  const { code, out } = verify(COMPOSED);
+  assert.equal(code, 0);
+  assert.match(out, /composed with no compatibility warning/);
+});
+
+test("the composition check rejects a plugin the runtime skipped", () => {
+  // The regression this exists for: the skip message CONTAINS the package name,
+  // so a name-substring check passes while nothing loads. The composed row is
+  // present here too, which is why presence alone is not enough.
+  const { code, out } = verify(`${SKIPPED}${COMPOSED}`);
+  assert.equal(code, 1, "a skipped plugin must fail the check");
+  assert.match(out, /composed but the runtime SKIPPED it/);
+  assert.match(out, /Fix the peerDependencies range/);
+});
+
+test("the composition check rejects a plugin that is absent entirely", () => {
+  const { code, out } = verify("# == @deepseek-ai/dsh-base\n- id: llm\n");
+  assert.equal(code, 1);
+  assert.match(out, /no composed row/);
 });

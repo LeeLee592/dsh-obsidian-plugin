@@ -84,8 +84,9 @@ Two rules hold at every tier: **writes stay inside the session workspace** — f
 │   ├── p2c.test.ts       # node:test over lib/: e2e scaffold
 │   └── p3.test.ts        # node:test over lib/: eval guardrails
 ├── scripts/
-│   ├── link-dsh-deps.mjs # link $DSH_HOME @deepseek-ai types
-│   └── deploy.sh         # build + register tools + dump-config verify
+│   ├── link-dsh-deps.mjs # link the dsh installation's @deepseek-ai types (+ version self-check)
+│   ├── verify-composed.mjs # decide whether a profile dump really composed the plugin
+│   └── deploy.sh         # build + register tools + composition verify
 ├── assets/
 │   ├── templates/        # obsidian-sample-plugin template (14 files, placeholders)
 │   ├── harness/          # obsidian stub + scenario loader for the L2 offline smoke test
@@ -100,14 +101,14 @@ Two rules hold at every tier: **writes stay inside the session workspace** — f
 
 ```bash
 pnpm install            # install deps (typescript + @types/node + peer types)
-pnpm run link-dsh-deps  # link $DSH_HOME/profiles/node_modules/@deepseek-ai types
+pnpm run link-dsh-deps  # link the @deepseek-ai types the runtime actually loads (version-checked)
 pnpm run typecheck      # tsc --noEmit
 pnpm run build          # tsc -> lib/
 pnpm test               # build + node --test test/ (the six suites above)
 pnpm run deploy         # build + register into profile + dump-config verify
 ```
 
-`pnpm run deploy` is equivalent to: `pnpm run build` → `dsh plugin --profile web add "$(pwd)"` → `dsh --profile web --dump-config` and verify the output contains `obsidian-plugin`. Default profile is `web`; override with `DSH_PROFILE=<name>` or `pnpm run deploy -- <name>`.
+`pnpm run deploy` is equivalent to: `pnpm run build` → `dsh plugin --profile web add "$(pwd)"` → `dsh --profile web --dump-config`, then `scripts/verify-composed.mjs` decides whether the plugin is genuinely composed. It checks two separate facts — a composed row exists for the entry, and the runtime did not skip it for an incompatible peer range. Presence alone is not enough: an incompatible plugin still appears in the profile's bundle list, and the skip message itself contains the package name, so a name-substring check reports success for a plugin that never loads. Default profile is `web`; override with `DSH_PROFILE=<name>` or `pnpm run deploy -- <name>`.
 
 ## Tool Implementation Notes
 

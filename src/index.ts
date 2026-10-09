@@ -145,8 +145,17 @@ function registerSkill(ctx: any): void {
       source: "runtime",
       resourceBase: { kind: "directory", path: skillDir() },
     });
-  } catch {
-    // skill 注册失败不影响工具注册
+  } catch (error) {
+    // Tool registration must not be lost to a skill failure, but staying silent
+    // would hide a real defect: the service is present and the skill simply did
+    // not land in the agent's catalog.
+    try {
+      ctx?.logger?.warn?.(
+        `obsidian-plugin: could not register the obsidian-plugin skill — ${(error as Error)?.message ?? error}`,
+      );
+    } catch {
+      /* a missing logger must not turn a warning into a failure */
+    }
   }
 }
 

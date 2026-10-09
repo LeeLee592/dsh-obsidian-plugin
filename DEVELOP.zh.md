@@ -84,8 +84,9 @@
 │   ├── p2c.test.ts       # node:test 跑在 lib/ 上：e2e 脚手架
 │   └── p3.test.ts        # node:test 跑在 lib/ 上：eval 护栏
 ├── scripts/
-│   ├── link-dsh-deps.mjs # 链接 $DSH_HOME 的 @deepseek-ai 类型
-│   └── deploy.sh         # build + 注册工具 + dump-config 验证
+│   ├── link-dsh-deps.mjs # 链接运行时真正加载的 @deepseek-ai 类型（带版本自检）
+│   ├── verify-composed.mjs # 判定 profile dump 是否真的组合了本插件
+│   └── deploy.sh         # build + 注册工具 + 组合校验
 ├── assets/
 │   ├── templates/        # obsidian-sample-plugin 模板（14 个文件，含占位符）
 │   ├── harness/          # L2 离线冒烟用的 obsidian 桩与 scenario 装载器
@@ -100,14 +101,14 @@
 
 ```bash
 pnpm install            # 安装依赖（typescript + @types/node + peer 类型）
-pnpm run link-dsh-deps  # 链接 $DSH_HOME/profiles/node_modules/@deepseek-ai 类型
+pnpm run link-dsh-deps  # 链接运行时真正加载的 @deepseek-ai 类型（带版本自检）
 pnpm run typecheck      # tsc --noEmit 类型检查
 pnpm run build          # tsc -> lib/
 pnpm test               # build + node --test test/（即上面六个套件）
 pnpm run deploy         # build + 注册进 profile + dump-config 验证
 ```
 
-`pnpm run deploy` 等价于：`pnpm run build` → `dsh plugin --profile web add "$(pwd)"` → `dsh --profile web --dump-config` 并校验输出包含 `obsidian-plugin`。默认 profile 为 `web`，可用 `DSH_PROFILE=<name>` 或 `pnpm run deploy -- <name>` 覆盖。
+`pnpm run deploy` 等价于：`pnpm run build` → `dsh plugin --profile web add "$(pwd)"` → `dsh --profile web --dump-config`，再由 `scripts/verify-composed.mjs` 判定插件是否**真的**被组合。它检查两件独立的事：组合结果里有该入口的行，以及运行时没有因 peer 范围不兼容而跳过它。只看「存在」是不够的——不兼容的插件仍会出现在 profile 的 bundles 列表里，而跳过告警本身就含有包名，因此按包名做子串匹配会对一个从未加载的插件报成功。默认 profile 为 `web`，可用 `DSH_PROFILE=<name>` 或 `pnpm run deploy -- <name>` 覆盖。
 
 ## 工具实现要点
 

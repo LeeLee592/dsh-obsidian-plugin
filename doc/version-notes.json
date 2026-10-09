@@ -1,5 +1,29 @@
 [
   {
+    "version": "0.9.1",
+    "date": "2026-10-09",
+    "zh": {
+      "title": "部署校验不再对「被跳过的插件」误报成功",
+      "items": [
+        "**修掉一个会让本次事故长期潜伏的验证漏洞**：`scripts/deploy.sh` 原先用 `dsh --dump-config | grep obsidian-plugin` 判定部署成功。但插件因 peer 不兼容被运行时跳过时，告警文本里恰好包含包名，且 profile 的 bundles 列表里也一直有它——于是**一个从未被加载的插件会一直报「部署成功」**。这正是 0.8.6 在 0.2.0-rc.2 上被跳过却无人察觉的原因。",
+        "检查改为两件独立的事：组合结果里存在该入口的**行**（`- id: obsidian-plugin`，而不是包名子串），以及运行时没有输出跳过告警。判定抽到 `scripts/verify-composed.mjs`，因此可以单测——新增 3 项测试分别覆盖「正常组合」「已组合但被跳过」「完全缺席」，其中「被跳过」用例特意同时提供组合行与跳过告警，确保不会被误判为成功。",
+        "**技能注册失败不再静默**：`registerSkill` 的 catch 原本吞掉一切异常。skills 服务存在而注册失败（例如名字不符运行时的 `SKILL_NAME` 模式）会让技能悄悄从模型目录里消失，因此改为记一条 warning；新增测试覆盖「合法形状注册成功」与「失败会被报告」。",
+        "**文档同步**：`link-dsh-deps.mjs` 的来源已改为「运行时真正加载的 dsh 安装」并带版本自检，文件树与 `pnpm run deploy` 的说明随之更新（原文写的是 `$DSH_HOME/profiles/node_modules`、以及「校验输出包含 obsidian-plugin」）。",
+        "验证：78 项测试通过；在真实 profile 上跑完整 `pnpm run deploy` 退出码 0 且判定正确；负向用例（peer 范围改回 ^0.1.5-rc.2）确认会报 FAIL 而不是 OK。"
+      ]
+    },
+    "en": {
+      "title": "The deploy check no longer reports success for a plugin that is being skipped",
+      "items": [
+        "**Closed the verification hole that let this incident stay hidden**: `scripts/deploy.sh` decided success with `dsh --dump-config | grep obsidian-plugin`. When a plugin is skipped for an incompatible peer range, the warning text contains the package name and the profile's bundle list contains it permanently — so **a plugin that never loads reports as successfully deployed**. That is exactly how 0.8.6 stayed unnoticed while being skipped on 0.2.0-rc.2.",
+        "The check now verifies two independent facts: the composed tree contains a ROW for the entry (`- id: obsidian-plugin`, not a name substring), and the runtime printed no skip warning. The decision moved into `scripts/verify-composed.mjs` so it can be tested — three new tests cover composed, composed-but-skipped, and absent. The skipped case deliberately supplies both a composed row and the skip warning, so a presence-only check cannot pass it.",
+        "**A skill registration failure is no longer silent**: `registerSkill`'s catch swallowed everything. With the skills service present but registration failing (for instance a name that misses the runtime's `SKILL_NAME` pattern), the skill would quietly vanish from the model's catalog, so it now logs a warning; tests cover both a valid registration and a reported failure.",
+        "**Docs synced**: `link-dsh-deps.mjs` now links from the dsh installation the runtime actually loads (with a version self-check), so the file tree and the `pnpm run deploy` description were updated (they still named `$DSH_HOME/profiles/node_modules` and \"verify the output contains obsidian-plugin\").",
+        "Verified: 78 tests pass; a full `pnpm run deploy` against the real profile exits 0 with a correct verdict; and the negative case (peer range set back to ^0.1.5-rc.2) fails with FAIL rather than OK."
+      ]
+    }
+  },
+  {
     "version": "0.9.0",
     "date": "2026-10-09",
     "zh": {

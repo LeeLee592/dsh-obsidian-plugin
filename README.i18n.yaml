@@ -3,5 +3,5 @@
 # Values are git blob hashes from the last confirmed-consistent review.
 README.md: 0f6de6569f7a3e9c2a18098ad5810ae3a71f0262
 README.zh.md: 8f2f4f930b08c640fc9bad8e5b127cd445fd0ee1
-DEVELOP.md: 87fce8df0577f4a903adaae207fc3be91444219e
-DEVELOP.zh.md: cfc161e362373ea83503a8a13881546df85faa9d
+DEVELOP.md: 3ee0b8323d3ee296f3b1e4719ba9abc1c16aabc0
+DEVELOP.zh.md: 20b7d3b016aee43060d4dcbb9e819c11d7b8bce3

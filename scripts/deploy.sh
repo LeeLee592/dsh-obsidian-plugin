@@ -19,13 +19,10 @@ pnpm run build
 echo "==> register checkout into profile '$PROFILE'"
 dsh plugin --profile "$PROFILE" add "$ROOT"
 
-echo "==> verify: dump-config should contain '$PLUGIN_ID'"
-if dsh --profile "$PROFILE" --dump-config | grep -q "$PLUGIN_ID"; then
-  echo "deploy: OK — '$PLUGIN_ID' registered in profile '$PROFILE'"
-else
-  echo "deploy: FAIL — '$PLUGIN_ID' not found in profile '$PROFILE' config" >&2
-  exit 1
-fi
-
+echo "==> verify: '$PLUGIN_ID' is composed AND not skipped"
+# The check lives in its own script so it can be unit-tested: a plain
+# `grep obsidian-plugin` reported success for a plugin the runtime was skipping,
+# because the incompatibility message contains the package name.
+dsh --profile "$PROFILE" --dump-config 2>&1 | node "$ROOT/scripts/verify-composed.mjs" "$PLUGIN_ID" "@leelee592/dsh-obsidian-plugin"
 echo
 echo "next: dsh --profile $PROFILE   # 重启后模型工具集多出 11 个 obsidian_plugin_* 工具"
