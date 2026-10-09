@@ -1,5 +1,29 @@
 [
   {
+    "version": "0.9.0",
+    "date": "2026-10-09",
+    "zh": {
+      "title": "适配 DeepSeek Harness 0.2.0-rc.2",
+      "items": [
+        "**插件此前在 0.2.0-rc.2 上完全不加载**：peer 范围仍是 `@deepseek-ai/dsh-tools` ^0.1.5-rc.2，DSH 在组合阶段直接跳过它（`skipping profile bundle … is incompatible with dsh 0.2.0-rc.2`），任何 `obsidian_plugin_*` 工具都调不到。范围已更新为 `@deepseek-ai/dsh-tools` ^0.2.0-rc.2、`@deepseek-ai/cordis` ^4.0.4、`@deepseek-ai/schemastery` ^3.18.4；实测组合结果里已出现 `id: obsidian-plugin` 且无任何兼容性告警。注意这是**加载闸门**：版本不符不会「部分可用」，而是根本不被挂载。",
+        "**移除对 `ctx.fs.mkdir` 的调用**：沙箱化文件系统后端**没有** `mkdir`（基类契约与后端原型均已核对），我上一版为「脚手架开箱即跑」新增的 `Fs.mkdir` 会在真实部署上抛 `TypeError`。改为写文件时由后端自建父目录链；标记文件也随之移到 `.obsidian/.gitkeep`——因为写入只创建自己的父目录链，写在库根目录的话 `.obsidian` 仍不会被创建，而 service 要的正是它。同时校验 `writeText` → `writeFileAtomic` → `mkdir(dirname, {recursive:true})` 确实建父目录。",
+        "**修正开发期类型链接**：`link-dsh-deps.mjs` 改为从**实际运行 dsh 的安装目录**解析 `@deepseek-ai/*`（此前指向 profile 目录，pnpm 装的旧副本会掩盖真实不兼容），并在链接后打印各包版本、按运行时的同一套判定（只查 `@deepseek-ai/dsh` 与 `dsh-*`，且 `satisfies(..., { includePrerelease: true })`）自检 peer 范围，不满足即失败——避免「类型检查在旧类型上通过、运行时却被跳过」再次静默发生。",
+        "**新增回归测试**：用屏蔽了 `mkdir` 的后端代理驱动脚手架，确保「无 mkdir 也能建出 `.obsidian` 库」这一点被钉住（共 73 项测试通过）。",
+        "验证方式：①复现 DSH 的 `evaluatePluginCompatibility` 判定逻辑，对我们全部 peer 逐字求值；②用真实 cordis 4.0.4 + dsh-tools 0.2.0-rc.2 加载构建产物，确认 11 个工具全部注册且形状完整；③真实执行 `obsidian_plugin_validate` 走通 execute 路径；④`dsh --profile web --dump-config` 显示插件已被组合、无兼容性告警。"
+      ]
+    },
+    "en": {
+      "title": "Adapted to DeepSeek Harness 0.2.0-rc.2",
+      "items": [
+        "**The plugin did not load at all on 0.2.0-rc.2**: its peer range was still `@deepseek-ai/dsh-tools` ^0.1.5-rc.2, so DSH skipped it during composition (`skipping profile bundle … is incompatible with dsh 0.2.0-rc.2`) and no `obsidian_plugin_*` tool was reachable. The ranges are now `@deepseek-ai/dsh-tools` ^0.2.0-rc.2, `@deepseek-ai/cordis` ^4.0.4 and `@deepseek-ai/schemastery` ^3.18.4, and the composed config now lists `id: obsidian-plugin` with no compatibility warning. Note this is a LOAD gate: a mismatched range does not leave the plugin partly working — it is not mounted at all.",
+        "**Removed the `ctx.fs.mkdir` call**: the sandboxed filesystem backend has no `mkdir` (checked against both the base contract and the backend's prototype), so the `Fs.mkdir` helper added in the previous release for \"the scaffold runs as generated\" would throw `TypeError` on the real deployment. Directory creation now happens through writing a file, since every backend creates missing parents; the marker file moved to `.obsidian/.gitkeep` for the same reason — a write creates only its own parent chain, so a marker at the vault root would still leave `.obsidian` missing, which is exactly the directory the service requires. Verified that `writeText` → `writeFileAtomic` → `mkdir(dirname, {recursive:true})` does create parents.",
+        "**Fixed the development-time type linking**: `link-dsh-deps.mjs` now resolves `@deepseek-ai/*` from the installation that actually runs `dsh` (it previously pointed at the profile directory, where a stale pnpm-installed copy hid real incompatibilities), prints the linked versions, and self-checks every peer range with the runtime's own rule (only `@deepseek-ai/dsh` and `dsh-*`, satisfied with `{ includePrerelease: true }`), failing when a range does not hold — so \"type-checks against old types while the runtime skips the plugin\" cannot happen silently again.",
+        "**New regression test**: the scaffold is driven through a backend proxy with `mkdir` masked out, pinning that a vault with `.obsidian` is still created without it (73 tests pass).",
+        "How this was verified: (1) DSH's own `evaluatePluginCompatibility` logic was reproduced and evaluated verbatim against every peer; (2) the build output was loaded in a real cordis 4.0.4 + dsh-tools 0.2.0-rc.2 context, confirming all 11 tools register with complete shapes; (3) `obsidian_plugin_validate` was executed for real through its `execute` path; (4) `dsh --profile web --dump-config` shows the plugin composed with no compatibility warning."
+      ]
+    }
+  },
+  {
     "version": "0.8.6",
     "date": "2026-09-23",
     "zh": {

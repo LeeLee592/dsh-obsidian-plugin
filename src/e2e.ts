@@ -250,12 +250,26 @@ async function init(fs: Fs, args: E2eArgs, call: FsCall, artifactDir?: string): 
 
   // A config whose vault path does not exist fails before the first spec, so the
   // vault is part of the scaffold, not something the developer is left to notice.
+  //
+  // The directory is created by writing a file into it, not by a mkdir call: the
+  // sandboxed filesystem backend exposes no mkdir at all (verified on its
+  // prototype), while every backend's writeText creates missing parents. Using
+  // mkdir here would throw on the very deployment this tool exists for.
   if (!vault.existing) {
-    await fs.mkdir(join(vault.dir, ".obsidian"), call.policy, call.signal);
-    // A marker the generated .gitignore un-ignores, so the vault directory
-    // itself survives a clone. Without it the first run on a fresh checkout
-    // fails in onPrepare exactly like the original defect.
-    await fs.writeText(join(vault.dir, ".gitkeep"), "", call.policy, call.signal);
+    // The marker sits INSIDE .obsidian on purpose: a write creates only its own
+    // parent chain, so `vault/.gitkeep` would leave `.obsidian` missing — which
+    // is exactly the directory wdio-obsidian-service requires. The file doubles
+    // as the marker the generated .gitignore un-ignores, so the vault folder
+    // survives a clone instead of failing on a fresh checkout.
+    await fs.writeText(join(vault.dir, ".obsidian", ".gitkeep"), "", call.policy, call.signal);
+    const vaultReady = await fs.isDirectory(join(vault.dir, ".obsidian"), call.workspaceRoot);
+    if (!vaultReady) {
+      return [
+        `Error: could not create the test vault at "${join(vault.dir, ".obsidian")}".`,
+        "The write reported success but the directory is not there, so every run would fail in onPrepare.",
+        "Check that the path is writable, or create the vault by hand and re-run action=init.",
+      ].join("\n");
+    }
     written.push(`${posixRel(projectDir, vault.dir)}/ (empty test vault)`);
   }
   } catch (error) {

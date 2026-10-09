@@ -63,8 +63,8 @@ dsh plugin --profile web add @leelee592/dsh-obsidian-plugin
 | 项 | 值 |
 | --- | --- |
 | profile | `web` |
-| DeepSeek Harness | 0.1.5-rc 实测 |
-| peer deps | `@deepseek-ai/cordis` ^4.0.2 · `@deepseek-ai/dsh-tools` ^0.1.5-rc.2 · `@deepseek-ai/schemastery` ^3.18.2 |
+| DeepSeek Harness | 0.2.0-rc.2 实测（不再支持 0.1.x） |
+| peer deps | `@deepseek-ai/cordis` ^4.0.4 · `@deepseek-ai/dsh-tools` ^0.2.0-rc.2 · `@deepseek-ai/schemastery` ^3.18.4 |
 | 权限 | 注入 `tools` + `fs`（受 DSH 沙箱约束，无外部网络调用） |
 | Node（开发构建） | 20+ |
 | License | MIT |

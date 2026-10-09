@@ -63,8 +63,8 @@ Tell DSH "create an Obsidian plugin …" and the agent loads the `obsidian-plugi
 | Item | Value |
 | --- | --- |
 | profile | `web` |
-| DeepSeek Harness | tested on 0.1.5-rc |
-| peer deps | `@deepseek-ai/cordis` ^4.0.2 · `@deepseek-ai/dsh-tools` ^0.1.5-rc.2 · `@deepseek-ai/schemastery` ^3.18.2 |
+| DeepSeek Harness | tested on 0.2.0-rc.2 (earlier 0.1.x releases are not supported) |
+| peer deps | `@deepseek-ai/cordis` ^4.0.4 · `@deepseek-ai/dsh-tools` ^0.2.0-rc.2 · `@deepseek-ai/schemastery` ^3.18.4 |
 | permissions | injects `tools` + `fs` (DSH-sandboxed, no external network calls) |
 | Node (dev build) | 20+ |
 | License | MIT |

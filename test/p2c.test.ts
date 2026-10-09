@@ -117,11 +117,50 @@ test("init creates a vault when the project has none, so the first run works", a
     // Without this the service aborts in onPrepare before any spec runs:
     // `Vault "…/e2e/vault" doesn't exist`.
     assert.match(out, /created empty/);
+    // `.obsidian` is what the service requires; the marker lives inside it
+    // because a write only creates its own parent chain.
     assert.equal(await fs.isDirectory(join(dir, "e2e", "vault", ".obsidian")), true, "the vault must exist after init");
-    assert.equal(await fs.exists(join(dir, "e2e", "vault", ".gitkeep")), true, "a marker must survive a clone");
+    assert.equal(await fs.exists(join(dir, "e2e", "vault", ".obsidian", ".gitkeep")), true, "a marker must survive a clone");
     const conf = await readFile(join(dir, "wdio.conf.mts"), "utf8");
     assert.match(conf, /const E2E_VAULT = "\.\/e2e\/vault"/, "the config must point at the vault that now exists");
     assert.doesNotMatch(conf, /\{\{/, "no placeholder may survive");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("the scaffold works on an fs backend that has no mkdir", async () => {
+  const dir = await project();
+  try {
+    // The deployed sandboxed backend exposes no mkdir at all (verified on its
+    // prototype), so a scaffold that needs one throws on the very deployment
+    // this tool exists for. This proxies a real backend and hides mkdir, which
+    // is the closest offline stand-in for that backend.
+    const realFs = new Fs();
+    const proxied = new Proxy(realFs, {
+      get(target, prop, receiver) {
+        if (prop === "fs") {
+          const backend = (target as unknown as { fs?: object }).fs;
+          if (!backend) return undefined;
+          return new Proxy(backend, {
+            get(b, key) {
+              if (key === "mkdir") return undefined; // the real backend has none
+              const value = Reflect.get(b, key);
+              return typeof value === "function" ? value.bind(b) : value;
+            },
+            has: (b, key) => key !== "mkdir" && key in b,
+            getOwnPropertyDescriptor: (b, key) =>
+              key === "mkdir" ? undefined : Object.getOwnPropertyDescriptor(b, key),
+          });
+        }
+        const value = Reflect.get(target, prop, receiver);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    }) as Fs;
+
+    const out = await e2eAction(proxied, { action: "init", projectDir: dir }, { workspaceRoot: tmpdir() });
+    assert.match(out, /created empty/, "the vault must still be created without mkdir");
+    assert.equal(await fs.isDirectory(join(dir, "e2e", "vault", ".obsidian")), true, ".obsidian must exist");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -246,7 +285,8 @@ test("init writes the scaffold, wires scripts and keeps the project's own entrie
     // fresh clone fail the first run in onPrepare, the same way the original bug did.
     assert.doesNotMatch(gitignore, /^e2e\/vault\/$/m, "a bare `e2e/vault/` would ignore the directory itself");
     assert.match(gitignore, /^e2e\/vault\/\*$/m, "ignore the vault's contents");
-    assert.match(gitignore, /^!e2e\/vault\/\.gitkeep$/m, "but keep the marker that preserves the directory");
+    assert.match(gitignore, /^!e2e\/vault\/\.obsidian\/$/m, "the .obsidian directory is required by the service, so it stays tracked");
+    assert.match(gitignore, /^!e2e\/vault\/\.obsidian\/\.gitkeep$/m, "and so does the marker inside it");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
