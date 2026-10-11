@@ -160,3 +160,22 @@ which is exactly the compatibility claim the manifest makes. Set
 matrix. Obsidian ships the app bundle and the Electron installer separately, so
 the same app version can be tested on different installer versions if that
 matters for a bug.
+
+## A generated config drifts; check it before trusting the run
+
+`obsidian_plugin_e2e action=status` exists for projects that already have a
+suite, and it is the first thing to run on one. A generated `wdio.conf.mts` is a
+frozen copy of a template that keeps improving, and a stale copy **does not
+fail** — it keeps running and quietly stops doing something it is supposed to do.
+The window-hiding hook is the clearest example: without it every run still
+passes, while flashing an Obsidian window on screen for about a second each time.
+
+That is not hypothetical. A real development session ran the suite **61 times**
+against a config generated before the hook existed, and nothing in the toolchain
+mentioned it, because `status` was never run. The tool described itself only as a
+scaffolder, so a project that already had a suite gave no reason to call it.
+
+`status` reports, per required setting, what is missing and why it matters, and
+the command that refreshes the config (`action=init force=true`; your specs and
+hand-edited files are kept). Treat a clean `status` as part of the L4 setup, not
+as an optional extra.

@@ -159,6 +159,11 @@ async function resolveVaultRef(fs: Fs, args: InspectArgs, call: FsCall = {}): Pr
   return { name: source };
 }
 
+/** First non-empty line of CLI output, for a one-line diagnostic. */
+function firstLine(text: string): string {
+  return (text.split("\n").find((line) => line.trim() !== "") ?? text).trim();
+}
+
 async function status(fs: Fs, args: InspectArgs, call: FsCall, cli: CliOptions): Promise<string> {
   const warnings: string[] = [];
   const ref = await resolveVaultRef(fs, args, call);
@@ -166,6 +171,23 @@ async function status(fs: Fs, args: InspectArgs, call: FsCall, cli: CliOptions):
   const version = runCli(["version"], cli);
   if (version.status === "missing" || version.status === "hang") {
     return explainCliFailure(version, "cannot read the Obsidian version");
+  }
+  // The app not running is its own outcome, not a pile of failures. Every later
+  // reading here is window-scoped, so when the version probe cannot reach the app
+  // the remaining probes cannot either; a real session produced four warnings
+  // saying the same thing, with no next step. Say it once, and point at the tier
+  // that needs no running app — a caller who does not want to disturb the user
+  // has a choice, and should be told what it is.
+  if (version.status === "error" && /unable to find obsidian|not running|is obsidian running/i.test(version.output)) {
+    return [
+      "Obsidian is not running, so nothing can be read from it.",
+      `  CLI said: ${firstLine(version.output)}`,
+      "The L3 tier reads the app you have open; it needs that app running and will not start one.",
+      "Options:",
+      "  1) Start Obsidian (any vault) and re-run — the reading follows whichever window is in front",
+      "  2) Use the sandboxed tier instead, which launches its own instance and never needs yours:",
+      "     obsidian_plugin_e2e action=status, then `pnpm run e2e` in the project",
+    ].join("\n");
   }
 
   // Identity probe first: it establishes which vault every later window-scoped

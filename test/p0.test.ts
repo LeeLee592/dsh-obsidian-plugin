@@ -8,7 +8,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtemp, readFile, writeFile, mkdir, rm } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, writeFile, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -387,3 +387,113 @@ test("the composition check rejects a plugin that is absent entirely", () => {
   assert.equal(code, 1);
   assert.match(out, /no composed row/);
 });
+
+// ---- regression tests from a real development session ----------------------
+//
+// These come from the session log of an actual plugin-development task; each one
+// covers a message that misled (or failed to help) the agent that read it.
+
+/** Put a fake `obsidian` executable on a private PATH so runCli reaches it. */
+async function fakeCli(body: string): Promise<{ env: NodeJS.ProcessEnv; dir: string }> {
+  const dir = await mkdtemp(join(tmpdir(), "p0-cli-"));
+  const bin = join(dir, "obsidian");
+  await writeFile(bin, `#!/bin/sh\n${body}\n`);
+  await chmod(bin, 0o755);
+  return { env: { ...process.env, PATH: `${dir}:${process.env.PATH}` }, dir };
+}
+
+test("inspect says the app is not running once, and offers the sandbox tier", async () => {
+  // The session log showed four warnings all repeating the CLI's own sentence,
+  // with no next step for a caller who does not want to disturb the user.
+  const { env, dir } = await fakeCli(
+    'echo "The CLI is unable to find Obsidian. Please make sure Obsidian is running and try again."; exit 1',
+  );
+  try {
+    const { inspect } = await import("../lib/inspect.js");
+    const out = await inspect(new Fs(), { action: "status" }, { workspaceRoot: tmpdir() }, { env });
+
+    assert.match(out, /Obsidian is not running/, "stated once, as a conclusion");
+    assert.match(out, /needs that app running and will not start one/, "the tier's requirement is explained");
+    assert.match(out, /obsidian_plugin_e2e action=status/, "and the tier that needs no app is offered");
+    const repeats = (out.match(/unable to find Obsidian/gi) ?? []).length;
+    assert.equal(repeats, 1, `the CLI sentence must appear once, not once per probe (saw ${repeats})`);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a build that hits its deadline names the script, the budget and the duration", async () => {
+  // The session log showed "esbuild step failed (timeout)" for a project whose
+  // build script runs `tsc && node esbuild.config.mjs`, with no timing at all —
+  // the same command finished in 1.7s when run by hand, so the message pointed
+  // the reader at the wrong file and gave nothing to act on.
+  const dir = await mkdtemp(join(tmpdir(), "p0-slow-"));
+  try {
+    await writeFile(join(dir, "manifest.json"), JSON.stringify({
+      id: "slow-demo", name: "Slow", version: "1.0.0", minAppVersion: "1.0.0", description: "d.", author: "a",
+    }));
+    await writeFile(join(dir, "package.json"), JSON.stringify({ name: "slow-demo", version: "1.0.0", scripts: { build: "sleep 30" } }));
+    await mkdir(join(dir, "src"), { recursive: true });
+    await writeFile(join(dir, "src", "main.ts"), "export default class {}\n");
+    await writeFile(join(dir, "esbuild.config.mjs"), "// present so the project-script tier is eligible\n");
+
+    const { buildPlugin } = await import("../lib/build.js");
+    const out = await buildPlugin(fs, { projectDir: dir, timeoutMs: 1200 }, { workspaceRoot: tmpdir() });
+
+    assert.match(out, /the project's own `build` script did not finish in/, "the failing thing is the script, not esbuild");
+    assert.doesNotMatch(out, /esbuild step failed/, "the old misattribution must be gone");
+    assert.match(out, /and was killed after \d+s/, "the elapsed time is reported");
+    assert.match(out, /timed as one step/, "and it says the pipeline is timed as a whole");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("the offline smoke report never ends a sentence on a conjunction", async () => {
+  // The session log printed "Rendering, events and" and stopped, truncating the
+  // very sentence that is supposed to limit what a PASS means.
+  const { testPlugin } = await import("../lib/harness.js");
+  const dir = await mkdtemp(join(tmpdir(), "p0-note-"));
+  try {
+    await writeFile(join(dir, "manifest.json"), JSON.stringify({
+      id: "note-demo", name: "Note", version: "1.0.0", minAppVersion: "1.0.0", description: "d.", author: "a",
+    }));
+    await writeFile(join(dir, "main.js"), `module.exports = require("obsidian").Plugin;\n`);
+
+    const out = await testPlugin(fs, { projectDir: dir });
+    for (const line of out.split("\n")) {
+      assert.doesNotMatch(line.trim(), /\b(and|or|the|with|that|to)$/i, `truncated sentence: ${JSON.stringify(line)}`);
+    }
+    assert.match(out, /NOT exercised|not exercised|NOT the real app/, "the limits are still stated");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a skipped lint check is reported as NOT RUN, not as a pass", async () => {
+  // In the session log this project's lint never finished inside its budget, so
+  // the run ended in OK with one line of warning — indistinguishable from a
+  // clean lint unless the wording says otherwise.
+  const { validateProject } = await import("../lib/index.js");
+  const dir = await mkdtemp(join(tmpdir(), "p0-lint-"));
+  try {
+    await writeFile(join(dir, "manifest.json"), JSON.stringify({
+      id: "lint-demo", name: "Lint", version: "1.0.0", minAppVersion: "1.0.0", description: "d.", author: "a",
+    }));
+    await writeFile(join(dir, "package.json"), JSON.stringify({ name: "lint-demo", version: "1.0.0" }));
+    await writeFile(join(dir, "versions.json"), JSON.stringify({ "1.0.0": "1.0.0" }));
+    // An eslint binary that never finishes, mimicking the real project.
+    await mkdir(join(dir, "node_modules", ".bin"), { recursive: true });
+    const bin = join(dir, "node_modules", ".bin", "eslint");
+    await writeFile(bin, "#!/bin/sh\nsleep 30\n");
+    await chmod(bin, 0o755);
+
+    const out = await validateProject(new Fs(), { projectDir: dir, lintTimeoutMs: 1200 });
+    assert.match(out, /OK: id=lint-demo/, "consistency checks still pass");
+    assert.match(out, /NOT RUN — eslint/, "the skipped check is labelled as skipped");
+    assert.match(out, /did NOT run for this project/, "and says what was therefore not covered");
+    assert.match(out, /covers manifest\/version consistency only/, "and scopes what the OK actually means");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, { timeout: 60_000 });

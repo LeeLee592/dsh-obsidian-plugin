@@ -1,5 +1,31 @@
 [
   {
+    "version": "0.9.2",
+    "date": "2026-10-11",
+    "zh": {
+      "title": "修掉四处会误导模型的问题（源自一次真实插件开发会话）",
+      "items": [
+        "**e2e 这一档不再只像个脚手架**：会话里 agent 在项目已有套件的情况下跑了 **61 次 `pnpm run e2e`**，却一次都没调用 `obsidian_plugin_e2e`。原因是工具描述把自己定位成「生成器」，`status` 只是个附属参数——而**漂移检测其实早就在里面**（能精确指出旧配置缺少隐藏窗口的 before 钩子）。那份配置生成于 0.8.3 之前，于是每次运行都在屏幕上闪一次 Obsidian 窗口。现在描述明确要求「项目已有套件时先跑 `action=status`」，并说清陈旧配置**不会报错、只会静默少做一件事**。",
+        "**构建超时不再甩锅给 esbuild，且必须报出耗时**：会话里 `obsidian_plugin_build` 报了 300s 超时，而 agent 手动跑同一条命令只用 **1.694s**。原报错是 `esbuild step failed (timeout)` —— 对走项目脚本的项目这归因是错的（实际是 `tsc && node esbuild.config.mjs` 整条管道），而且一个耗时数字都没有，读者无法区分「刚过线」与「挂死」。现在会报出「项目自身的 build 脚本未在 300s 内完成，实际执行 300s 后被终止」，点名失败的是脚本（脚本层）或 esbuild 直调（直调层），并说明整条管道是作为一步计时的。",
+        "**修掉一句被截断的门面文案**：`obsidian_plugin_test` 的输出里有一句断在 `Rendering, events and`。这句恰好是**限制 PASS 含义**的那句——前半句刚说「证明了视图插件能构建」，限制却断在半空，容易被读成渲染也被验证了。现已补全并强化为「构造成功只证明它能构建，不证明它能工作」。",
+        "**App 未运行时 `inspect` 给出一条结论与下一步**：原本会堆四条重复警告（每条都复述 CLI 的原话），把真正的事实淹掉。现在识别为「Obsidian 未运行」这一独立结局，说明 L3 档需要用户自己的 App 在跑且不会代启，并给出两条可选路径——启动 Obsidian，或改用不需要用户实例的沙箱档。",
+        "**被跳过的检查不再读作通过**：会话里 lint 每次都超 180s 被跳过，结果仍以 `OK` 结尾，仅有一行 warning，与「lint 干净」难以区分。现在标为 `NOT RUN`，说明因此**没有**运行 eslint-plugin-obsidianmd 检查，并界定该 OK 只覆盖 manifest/版本一致性。",
+        "验证：82 项测试通过（新增 4 项直接来自该会话的回归测试，含用假 CLI 可执行文件驱动真实 spawn 路径、用会卡住的构建脚本驱动超时路径）；并对用户那份真实项目只读复算，`status` 精确报出缺失的 hide 钩子，lint 跳过时输出新的 NOT RUN 文案。"
+      ]
+    },
+    "en": {
+      "title": "Four messages that misled the model, fixed (from a real plugin-development session)",
+      "items": [
+        "**The e2e tier no longer reads as a scaffolder only**: in the session the agent ran `pnpm run e2e` **61 times** on a project that already had a suite, and never once called `obsidian_plugin_e2e` — because the description positioned it as a generator with `status` as an incidental parameter. The drift detection was already there (it names the missing window-hiding `before` hook precisely), but that config predated 0.8.3, so every run flashed an Obsidian window on screen. The description now says to run `action=status` first on a project that has a suite, and that a stale config **does not fail — it silently stops doing something**.",
+        "**A build timeout no longer blames esbuild, and reports its timing**: the session showed `obsidian_plugin_build` hitting a 300s timeout while the agent's own run of the same command took **1.694s**. The old message was `esbuild step failed (timeout)`, which misattributes for the project-script tier (it is really `tsc && node esbuild.config.mjs`), and carried no duration, leaving no way to tell \"just over the line\" from \"hung forever\". It now reports that the project's own `build` script did not finish within 300s and was killed after 300s, names the failing thing per tier, and says the pipeline is timed as one step.",
+        "**A truncated sentence in the smoke report**: `obsidian_plugin_test` printed a sentence ending at `Rendering, events and`. That sentence is the one that limits what a PASS means — the clause before it had just said view plugins were proven constructible, and the limitation stopped mid-air, reading as though rendering had been verified too. It is now complete and states that a constructed view proves it builds, not that it works.",
+        "**`inspect` states \"not running\" once, with a next step**: it used to emit four warnings that each repeated the CLI's own sentence, drowning the one fact that mattered. That is now its own outcome: it says the L3 tier needs the user's app running and will not start one, and offers two paths — start Obsidian, or use the sandboxed tier that needs no instance of theirs.",
+        "**A skipped check no longer reads as a pass**: in the session lint exceeded its 180s budget on every run and was skipped, yet the result still ended in `OK` with a single warning line — barely distinguishable from a clean lint. It is now labelled `NOT RUN`, says the eslint-plugin-obsidianmd checks therefore did **not** run, and scopes the OK to manifest/version consistency.",
+        "Verified: 82 tests pass (four new regressions taken straight from that session, including one driving the real spawn path through a fake CLI executable and one driving the timeout path with a build script that never finishes); and re-running read-only against the real project shows `status` naming the missing hide hook and the new NOT RUN wording when lint is skipped."
+      ]
+    }
+  },
+  {
     "version": "0.9.1",
     "date": "2026-10-09",
     "zh": {

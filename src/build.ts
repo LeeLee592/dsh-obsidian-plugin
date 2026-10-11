@@ -54,6 +54,12 @@ export interface BuildArgs {
   entry?: string;
   /** Explicit output directory for main.js, overriding artifact discovery. */
   outDir?: string;
+  /**
+   * Deadline for the build step. Not a tool parameter: it exists so tests can
+   * drive the timeout path without waiting out the real budget, and so a caller
+   * with a genuinely slow project can raise it.
+   */
+  timeoutMs?: number;
 }
 
 export interface BuildReport {
@@ -97,6 +103,37 @@ const BUNDLER_CONFIGS = [
 ];
 
 /** Render the report the model sees. Plain text, short, always ends with a next step. */
+/**
+ * Turn a failed build step into a message a caller can act on.
+ *
+ * The tier decides what failed. This used to always say "esbuild step failed",
+ * which is wrong for the project-script tier (a `tsc && node esbuild.config.mjs`
+ * pipeline) and sends the reader to the wrong file. The elapsed time and the
+ * deadline are included because a bare "timeout" cannot be acted on: a step that
+ * ran 299s of a 300s budget needs a bigger budget, one that hung for the full
+ * window needs the hang found.
+ */
+function describeBuildFailure(result: RunResult, tier: string): string {
+  const what =
+    tier === TIER_SCRIPT
+      ? "the project's own `build` script"
+      : "the direct esbuild invocation";
+  const elapsed = result.elapsedMs === undefined ? undefined : Math.round(result.elapsedMs / 1000);
+
+  if (result.reason === "timeout") {
+    const budget = result.timeoutMs === undefined ? undefined : Math.round(result.timeoutMs / 1000);
+    return [
+      `${what} did not finish in ${budget ?? "?"}s and was killed after ${elapsed ?? "?"}s.`,
+      "A build that hits the deadline is usually (a) a command that waits for input or starts a watcher,",
+      "or (b) a slow full type-check. Check that the script exits in production mode, and that the step",
+      "runs standalone before retrying. Note the whole pipeline is timed as one step, so the failing",
+      "command is not necessarily the bundler.",
+    ].join("\n");
+  }
+  const detail = result.output || result.errorMessage || "(no output)";
+  return `${what} failed (${result.reason}${elapsed === undefined ? "" : `, ${elapsed}s`}):\n${detail}`;
+}
+
 export function renderBuildReport(report: BuildReport, text = ""): string {
   if (!report.ok) {
     const head = text || "Build failed.";
@@ -158,7 +195,7 @@ export async function buildPlugin(fs: Fs, args: BuildArgs, call: FsCall = {}): P
     // never exits (float-mark's config calls context.watch()).
     report.tier = TIER_SCRIPT;
     const pm = (await fs.exists(join(projectDir, "pnpm-lock.yaml"))) ? "pnpm" : "npm";
-    result = run({ command: pm, args: ["run", "build"], cwd: projectDir, timeoutMs: 300_000 });
+    result = run({ command: pm, args: ["run", "build"], cwd: projectDir, timeoutMs: args.timeoutMs ?? 300_000 });
   } else if (hasEsbuild && !hasBundlerConfig) {
     // No project config to honour, so our own flags are the whole truth.
     report.tier = TIER_DIRECT;
@@ -166,7 +203,7 @@ export async function buildPlugin(fs: Fs, args: BuildArgs, call: FsCall = {}): P
       command: bin,
       args: buildArgs(production, entryLookup.resolution.displayPath),
       cwd: projectDir,
-      timeoutMs: 180_000,
+      timeoutMs: args.timeoutMs ?? 180_000,
     });
   } else if (hasEsbuild && hasBundlerConfig && !production) {
     report.tier = TIER_DIRECT;
@@ -174,7 +211,7 @@ export async function buildPlugin(fs: Fs, args: BuildArgs, call: FsCall = {}): P
       command: bin,
       args: buildArgs(production, entryLookup.resolution.displayPath),
       cwd: projectDir,
-      timeoutMs: 180_000,
+      timeoutMs: args.timeoutMs ?? 180_000,
     });
     report.warnings.push(
       "built with our own esbuild flags because production=false; the project's bundler plugins were NOT applied",
@@ -190,8 +227,7 @@ export async function buildPlugin(fs: Fs, args: BuildArgs, call: FsCall = {}): P
   }
 
   if (!result.ok) {
-    const detail = result.output || result.errorMessage || "(no output)";
-    report.failures.push(`esbuild step failed (${result.reason}):\n${detail}`);
+    report.failures.push(describeBuildFailure(result, report.tier));
     return renderBuildReport(report, `Build failed via ${report.tier}.`);
   }
 

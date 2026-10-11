@@ -29,15 +29,21 @@ export interface RunResult {
   /** Combined, trimmed output — what a caller usually wants to show. */
   output: string;
   errorMessage?: string;
+  /** Wall-clock duration of the call, always present. */
+  elapsedMs?: number;
+  /** The deadline that was in force, so a timeout can name its own budget. */
+  timeoutMs?: number;
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 
 export function run(spec: RunSpec): RunResult {
+  const timeoutMs = spec.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const startedAt = Date.now();
   const result = spawnSync(spec.command, spec.args ?? [], {
     cwd: spec.cwd,
     encoding: "utf8",
-    timeout: spec.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    timeout: timeoutMs,
     env: spec.env ?? process.env,
     maxBuffer: 32 * 1024 * 1024,
   });
@@ -45,7 +51,10 @@ export function run(spec: RunSpec): RunResult {
   const stdout = result.stdout ?? "";
   const stderr = result.stderr ?? "";
   const output = (stdout.trim() || stderr.trim());
-  const base = { status: result.status, stdout, stderr, output };
+  // A bare "timeout" tells a caller nothing actionable: it cannot distinguish
+  // "just over the line" from "hung forever", nor know which deadline applied.
+  // Both travel with the result so every reporter can name them.
+  const base = { status: result.status, stdout, stderr, output, elapsedMs: Date.now() - startedAt, timeoutMs };
 
   // spawnSync sets `error` for ENOENT/EACCES and, separately, when the
   // `timeout` fired (error.code === 'ETIMEDOUT').

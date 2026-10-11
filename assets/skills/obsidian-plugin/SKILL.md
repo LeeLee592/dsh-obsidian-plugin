@@ -23,7 +23,7 @@ metadata:
 | `obsidian_plugin_vault` | 管理真机验证用的库：status 报告已注册的库、当前活动窗口与激活将要做什么；ensure 是两步确认（不带 confirm 只描述后果，confirm=true 才登记/打开该库，随后由 App 自证活动库并如实上报信任弹窗）；close（macOS）；prune 尚未实现 |
 | `obsidian_plugin_reload` | 让代码改动在运行中的 App 生效：reload / enable / disable / rescan（重扫插件清单索引：Obsidian 只在库加载时扫描一次插件目录）/ unrestrict（显式关闭该库受限模式，会重载窗口）；重载后校验插件是否真的注册进 App 并回报插件日志 |
 | `obsidian_plugin_test` | 离线冒烟（L2）：在纯 Node 里用桩化的 Obsidian API 加载构建产物，真跑一遍生命周期（默认导出是 Plugin 子类、onload() / onunload()、注册动作、无未处理 rejection）；不需要 Obsidian。**不验证运行期行为**：报告固定标注桩环境，并**明确写出本次没覆盖到什么**（注册为编辑器扩展的 UI 代码在无 DOM 宿主时不会执行）；DOM 相关插件需要项目自带 jsdom |
-| `obsidian_plugin_e2e` | 脚手架化沙箱端到端测试（L4，对你的 Obsidian 零干扰）：init 写入 WebdriverIO + wdio-obsidian-service 配置（独立配置目录 + 库副本的独立 Obsidian，不切窗口、不抢焦点；实例自身窗口在启动瞬间约 1 秒可见，任何开关都拦不住）并加入 e2e / e2e:watch 脚本；status 只报告现状与确切的安装命令、不写文件；runner 依赖留在项目里 |
+| `obsidian_plugin_e2e` | 沙箱端到端测试（L4，对你的 Obsidian 零干扰）：独立配置目录 + 库副本的独立 Obsidian，不切窗口、不抢焦点（实例自身窗口在启动瞬间约 1 秒可见，任何开关都拦不住）。**项目已有 e2e 套件时先跑 `action=status`**：生成的 wdio.conf.mts 是模板的冻结副本，模板会持续改进，而陈旧配置**不会报错、只会静默少做一件事**（例如不再隐藏实例窗口，于是每次运行都在屏幕上闪一下）。status 会点名缺哪项必需设置以及刷新命令；action=init 写入或刷新脚手架（默认保留手改文件，force=true 覆盖）；runner 依赖留在项目里 |
 | `obsidian_plugin_eval` | 在运行中的 App 里执行 JavaScript 并返回结果——实时状态的逃生舱：读真实运行时状态（插件实例、workspace、metadataCache）、驱动一次交互、不重构建就试一个修法。**唯一的高特权工具**：需审批，返回会把执行的代码回显出来；代码触及窗口焦点时（如 `electron.remote.getCurrentWindow().focus()`）会警告，因为那会抢走用户焦点。只读能回答的用 `obsidian_plugin_inspect`（免费、无需审批） |
 | `obsidian_plugin_validate` | 校验 manifest 必填字段、命名规则、versions.json 映射、package.json 版本一致性，并运行 eslint-plugin-obsidianmd 检查 |
 | `obsidian_plugin_version` | 同步 manifest.json / versions.json / package.json 三处版本 |

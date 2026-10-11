@@ -209,7 +209,7 @@ export async function scaffold(fs: Fs, args: ScaffoldArgs, call: FsCall = {}): P
   return `Scaffolded ${vars.id} into ${target} (${created} files). Next: cd ${args.targetDir} && pnpm install && pnpm run dev`;
 }
 
-export async function validateProject(fs: Fs, args: { projectDir: string }, call: FsCall = {}): Promise<string> {
+export async function validateProject(fs: Fs, args: { projectDir: string; lintTimeoutMs?: number }, call: FsCall = {}): Promise<string> {
   const dir = await fs.resolve(args.projectDir, call.workspaceRoot);
   const problems: string[] = [];
   const warnings: string[] = [];
@@ -243,11 +243,20 @@ export async function validateProject(fs: Fs, args: { projectDir: string }, call
   const eslintBin = join(dir, "node_modules", ".bin", "eslint");
   if (await fs.exists(eslintBin)) {
     const { run } = await import("./proc.js");
-    const result = run({ command: eslintBin, args: ["."], cwd: dir, timeoutMs: 180_000 });
+    const result = run({ command: eslintBin, args: ["."], cwd: dir, timeoutMs: args.lintTimeoutMs ?? 180_000 });
     if (result.reason === "spawn-error") {
       warnings.push(`eslint could not run: ${result.errorMessage ?? "unknown error"}`);
     } else if (result.reason === "timeout") {
-      warnings.push("eslint timed out after 180s — skipped");
+      // A skipped check must read as skipped, not as a passed one. In a real
+      // session this project's lint exceeded the budget on every run, so one
+      // line of warning was all that distinguished "linted clean" from "never
+      // linted" — and the run still ended in OK.
+      const secs = Math.round((result.elapsedMs ?? 0) / 1000);
+      warnings.push(
+        `NOT RUN — eslint did not finish within ${Math.round((result.timeoutMs ?? 180_000) / 1000)}s ` +
+          `(killed after ${secs}s), so the eslint-plugin-obsidianmd checks did NOT run for this project. ` +
+          "This result covers manifest/version consistency only. Run eslint directly if the submission matters.",
+      );
     } else if (!result.ok) {
       problems.push(`eslint (eslint-plugin-obsidianmd):\n${result.output}`);
     }
@@ -446,9 +455,9 @@ export function apply(ctx: any, config: any) {
 
   ctx.tools.register(defineTool({
     name: "obsidian_plugin_e2e",
-    description: "Scaffold sandboxed end-to-end tests (L4) — the verification tier that does NOT touch your Obsidian. It generates a WebdriverIO + wdio-obsidian-service setup that launches its own Obsidian with an isolated config directory and a copy of the vault, so nothing switches your window or steals focus. Use it to remove the window-switching that live CLI checks cause. It scaffolds and reports; it never runs the suite for you (run `pnpm run e2e`).",
+    description: "Sandboxed end-to-end tests (L4): a separate Obsidian with an isolated config directory and a copy of the vault, so verifying a change never switches your window or steals focus. Use action=status FIRST on any project that already has an e2e suite — a generated wdio.conf.mts is a frozen copy of a template that keeps improving, and an outdated one fails silently: it still runs, it just stops doing something it is supposed to do (for example hiding the instance window, so every run flashes a window on screen). status names exactly which required settings are missing and the command that refreshes them. action=init writes or refreshes the scaffold. It never runs the suite for you: run `pnpm run e2e`.",
     parameters: {
-      action: { type: "string", required: true, description: "init (write the scaffold) | status (report what exists, what is missing)" },
+      action: { type: "string", required: true, description: "status (diagnose: report what exists, what is missing, and which required settings an existing config has drifted out of) | init (write or refresh the scaffold; keeps hand-edited files unless force=true). Prefer status on a project that already has a suite." },
       projectDir: { type: "string", required: true, description: "Plugin project directory (absolute or workspace-relative)." },
       dir: { type: "string", description: "Scaffold directory inside the project (default 'e2e')." },
       force: { type: "boolean", description: "Overwrite generated files that already exist (default false)." },

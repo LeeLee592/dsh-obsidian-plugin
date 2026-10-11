@@ -113,7 +113,8 @@ function offlineNote(result: HarnessResult): string {
     ? "Note: offline stub environment, NOT the real app — this proves the bundle loads, registers, unloads,"
     : "Note: offline stub environment, NOT the real app — this only proves the bundle loads, registers and unloads.";
   const middle = result.dom
-    ? "\n      and that the registered view plugins can be constructed against a stub view. Rendering, events and"
+    ? "\n      and that the registered view plugins can be constructed against a stub view. Rendering, events" +
+      "\n      and real geometry are NOT exercised: a constructed view proves it builds, not that it works."
     : "\n      UI code registered as an editor extension was NOT exercised: no DOM host was available.";
   // The stub's vault is always empty (its file map is never populated), so a
   // plugin that iterates notes sees none offline. Saying so here stops a reader
